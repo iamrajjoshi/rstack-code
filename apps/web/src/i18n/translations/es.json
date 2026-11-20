@@ -3372,6 +3372,8 @@
   "0e7b21ab11721ca7": "Ningún comando coincide.",
   "2029db2cc30beb6d": "Abrir ajustes del proveedor",
   "517cfb8f24123f5b": "No hay ningún proveedor disponible",
+  "6c148396b14a18e2": "Coordinador: delega la implementación a workers",
+  "125f716cb3237567": "Convertir este hilo en coordinador",
   "7ff1a0ef1490668d": "La API del portapapeles no está disponible al copiar el ID del hilo de comentarios de Codex.",
   "1967731535386826": "No se pudo copiar el ID del hilo de comentarios de Codex al portapapeles.",
   "9c5afbfbbe8b305d": "No se pudo copiar el ID del hilo",
@@ -12166,5 +12168,11 @@
   "27d76249d09eb69f": "Guía de revisión lista",
   "faa3bb26abb39c93": "Falló la guía de revisión",
   "b7df38b7d8792d78": "Abrir guía",
-  "9e91e9a77b664e4e": "No se pudo iniciar una guía de revisión"
+  "9e91e9a77b664e4e": "No se pudo iniciar una guía de revisión",
+  "94253da34149f9fb": "{count, plural, one {{count} trabajando} other {{count} trabajando}}",
+  "eec771021e6c5d49": "{count, plural, one {{count} necesita respuesta} other {{count} necesitan respuesta}}",
+  "51ffaef4f1687539": "{count, plural, one {{count} con error} other {{count} con error}}",
+  "66b20c1a4015e2a8": "{count, plural, one {{count} terminado} other {{count} terminados}}",
+  "5d8a31c5377ec3d7": "Ocultar subagentes: {summary}",
+  "35376d3144ad77f3": "Mostrar subagentes: {summary}"
 }

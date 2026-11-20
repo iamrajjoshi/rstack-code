@@ -168,9 +168,21 @@ describe("omitIdleSubagentShells", () => {
       ...overrides,
     });
 
+  // Settled 25 times after the root, which makes the root an older settled thread.
+  const newerSettled = Array.from({ length: 25 }, (_, index) =>
+    row(`settled-${index}`, null, {
+      settledOverride: "settled",
+      settledAt: DateTime.makeUnsafe(1_000 + index),
+    }),
+  );
+  const olderSettledRoot = row("root", null, {
+    settledOverride: "settled",
+    settledAt: DateTime.makeUnsafe(0),
+  });
+
   it("drops idle leaf children but keeps live ones and the middle of nested chains", () => {
     const threads = [
-      row("root", null),
+      olderSettledRoot,
       row("idle", "root"),
       row("running", "root", { activityRunStatus: "running" }),
       row("queued", "root", { status: "queued" }),
@@ -187,21 +199,46 @@ describe("omitIdleSubagentShells", () => {
       // Idle, but a woken grandchild walks through it to reach the root's badge.
       row("middle", "root"),
       row("grandchild", "middle"),
+      row("orphan", "missing"),
+      ...newerSettled,
+    ];
+    expect(
+      omitIdleSubagentShells(threads)
+        .map((thread) => thread.id)
+        .filter((id) => !id.startsWith("settled-")),
+    ).toEqual(["root", "running", "queued", "asking", "background", "middle"]);
+  });
+
+  it("keeps idle children nested under a listed thread that is not older settled", () => {
+    const threads = [
+      row("root", null),
+      row("idle", "root"),
+      row("middle", "root"),
+      row("grandchild", "middle"),
+      row("side-chat", "root", {
+        lineage: {
+          parentThreadId: ThreadId.make("root"),
+          relationshipToParent: "fork",
+          rootThreadId: ThreadId.make("root"),
+          sideChat: true,
+        },
+      }),
+      row("under-side-chat", "side-chat"),
+      row("orphan", "missing"),
     ];
     expect(omitIdleSubagentShells(threads).map((thread) => thread.id)).toEqual([
       "root",
-      "running",
-      "queued",
-      "asking",
-      "background",
+      "idle",
       "middle",
+      "grandchild",
+      "side-chat",
     ]);
   });
 
   it("still filters the transcript events of omitted children for a subscriber that opts in", () => {
-    const threads = [row("root", null), row("idle", "root")];
+    const threads = [olderSettledRoot, row("idle", "root"), ...newerSettled];
     const omitted = activeShellRowsForSubscriber(threads, true);
-    expect(omitted.threads.map((thread) => thread.id)).toEqual(["root"]);
+    expect(omitted.threads.map((thread) => thread.id).slice(0, 2)).toEqual(["root", "settled-0"]);
     expect(
       shouldPublishShellApplicationEvent(
         {

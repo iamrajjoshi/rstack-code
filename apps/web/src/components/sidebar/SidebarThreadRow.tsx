@@ -114,6 +114,7 @@ import {
   ThreadSearchPullRequestNumber,
 } from "../ThreadStatusIndicators";
 import { pickSnoozePreset, resolveSnoozePresets, type SnoozePreset } from "../Sidebar.snooze";
+import { SidebarChildThreads } from "./SidebarChildThreads";
 import { useThreadShell } from "../../state/entities";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { ThreadSearchMatchExcerpt } from "../ThreadSearchMatch";
@@ -595,6 +596,8 @@ type SidebarThreadRowProps = {
   // Unlike isActive, never true for the ancestor standing in for an open
   // subagent: drafts and PR clicks care about which composer is on screen.
   isRouteThread: boolean;
+  // The open thread while it is one of this row's nested subagents; null on every other row.
+  openChildThreadKey?: string | null | undefined;
   // Read at click time; a prop would re-render every row on entering or leaving a thread route.
   readOpensPullRequestsInRightPanel: () => boolean;
   jumpLabel: string | null;
@@ -1060,6 +1063,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         {dropVerbBadge[destinationVerb]}
       </span>
     ) : null;
+
+  const childThreads = (
+    <SidebarChildThreads
+      parentRef={threadRef}
+      openThreadKey={props.openChildThreadKey ?? null}
+      providerEntryByInstanceId={props.providerEntryByInstanceId}
+      onThreadActivate={onThreadActivate}
+    />
+  );
 
   const accessibility = resolveSidebarRowAccessibility({
     title: thread.title,
@@ -1527,6 +1539,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           </TooltipTrigger>
           {detailsTooltip}
         </Tooltip>
+        {childThreads}
       </li>
     );
   }
@@ -1742,6 +1755,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         </TooltipTrigger>
         {detailsTooltip}
       </Tooltip>
+      {childThreads}
     </li>
   );
 });

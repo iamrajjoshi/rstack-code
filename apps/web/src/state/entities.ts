@@ -176,6 +176,11 @@ export function useChildThreadInputs(ref: ScopedThreadRef | null) {
   );
 }
 
+/** The thread's subagents, held through their streaming ticks. */
+export function useSubagentChildren(ref: ScopedThreadRef): ReadonlyArray<EnvironmentThreadShell> {
+  return useAtomValue(environmentThreadShells.subagentChildrenAtom(ref));
+}
+
 export function useThreadProjection(ref: ScopedThreadRef | null): EnvironmentThread | null {
   return useAtomValue(
     ref === null ? EMPTY_THREAD_PROJECTION_ATOM : environmentThreadDetails.threadAtom(ref),

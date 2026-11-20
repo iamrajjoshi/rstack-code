@@ -3372,6 +3372,8 @@
   "0e7b21ab11721ca7": "No matching command.",
   "2029db2cc30beb6d": "Open provider settings",
   "517cfb8f24123f5b": "No provider available",
+  "6c148396b14a18e2": "Coordinator: delegates implementation to workers",
+  "125f716cb3237567": "Make this thread a coordinator",
   "7ff1a0ef1490668d": "Clipboard API is unavailable while copying Codex feedback thread ID.",
   "1967731535386826": "Failed to copy Codex feedback thread ID to the clipboard.",
   "9c5afbfbbe8b305d": "Could not copy thread ID",
@@ -12180,5 +12182,11 @@
   "27d76249d09eb69f": "Review guide ready",
   "faa3bb26abb39c93": "Review guide failed",
   "b7df38b7d8792d78": "Open guide",
-  "9e91e9a77b664e4e": "Could not start a review guide"
+  "9e91e9a77b664e4e": "Could not start a review guide",
+  "94253da34149f9fb": "{count, plural, one {{count} working} other {{count} working}}",
+  "eec771021e6c5d49": "{count, plural, one {{count} needs input} other {{count} need input}}",
+  "51ffaef4f1687539": "{count, plural, one {{count} failed} other {{count} failed}}",
+  "66b20c1a4015e2a8": "{count, plural, one {{count} done} other {{count} done}}",
+  "5d8a31c5377ec3d7": "Hide subagents: {summary}",
+  "35376d3144ad77f3": "Show subagents: {summary}"
 }

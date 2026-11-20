@@ -38,6 +38,7 @@ const EMPTY_SIDE_CHATS_BY_PARENT: ReadonlyMap<
   ReadonlyArray<OrchestrationV2ThreadShell>
 > = new Map();
 const EMPTY_THREAD_SHELLS: ReadonlyArray<EnvironmentThreadShell> = Object.freeze([]);
+const EMPTY_SUBAGENT_IDS_BY_PARENT: ReadonlyMap<ThreadId, ReadonlyArray<ThreadId>> = new Map();
 const EMPTY_THREAD_REFS_BY_PROJECT: ReadonlyMap<
   ProjectId,
   ReadonlyArray<ScopedThreadRef>
@@ -331,6 +332,23 @@ export function createEnvironmentThreadShellAtoms(input: {
     }).pipe(Atom.withLabel(`environment-side-chats-by-parent:${environmentId}`)),
   );
 
+  // Subagent ids by parent, for sidebars that nest them. Without subagents it stays the same
+  // empty map, so parent rows do no work.
+  const environmentSubagentIdsByParentAtom = Atom.family((environmentId: EnvironmentId) =>
+    Atom.make((get) => {
+      let byParent: Map<ThreadId, ThreadId[]> | undefined;
+      for (const thread of get(environmentThreadsAtom(environmentId))) {
+        const parentId = thread.lineage.parentThreadId;
+        if (thread.lineage.relationshipToParent !== "subagent" || parentId === null) continue;
+        byParent ??= new Map();
+        const siblings = byParent.get(parentId);
+        if (siblings) siblings.push(thread.id);
+        else byParent.set(parentId, [thread.id]);
+      }
+      return byParent ?? EMPTY_SUBAGENT_IDS_BY_PARENT;
+    }).pipe(Atom.withLabel(`environment-subagent-ids-by-parent:${environmentId}`)),
+  );
+
   // What an environment's own subagents ask. Kept apart from the tasks other
   // environments run for it, so two environments delegating to each other
   // never read each other's totals.
@@ -596,6 +614,26 @@ export function createEnvironmentThreadShellAtoms(input: {
     }).pipe(Atom.withLabel(`environment-side-chats:${key}`));
   });
 
+  // A parent's subagents in creation order, held through their streaming ticks.
+  const subagentChildrenAtomFamily = Atom.family((key: string) => {
+    const ref = parseThreadKey(key);
+    let previous = EMPTY_THREAD_SHELLS;
+    return Atom.make((get) => {
+      const ids = get(environmentSubagentIdsByParentAtom(ref.environmentId)).get(ref.threadId);
+      const next: EnvironmentThreadShell[] = [];
+      for (const threadId of ids ?? []) {
+        const shell = get(
+          quietThreadShellAtomFamily(threadKey({ environmentId: ref.environmentId, threadId })),
+        );
+        if (shell !== null && shell.archivedAt === null) next.push(shell);
+      }
+      next.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      if (arrayElementsEqual(previous, next)) return previous;
+      previous = next.length === 0 ? EMPTY_THREAD_SHELLS : next;
+      return previous;
+    }).pipe(Atom.withLabel(`environment-subagent-children:${key}`));
+  });
+
   const threadShellsForProjectRefsAtomFamily = Atom.family((key: string) => {
     const projectRefs = parseProjectRefCollectionKey(key);
     let previous: ReadonlyArray<EnvironmentThreadShell> = [];
@@ -799,5 +837,6 @@ export function createEnvironmentThreadShellAtoms(input: {
     quietThreadShellAtom: (ref: ScopedThreadRef) => quietThreadShellAtomFamily(threadKey(ref)),
     childThreadInputsAtom: (ref: ScopedThreadRef) => childThreadInputsAtomFamily(threadKey(ref)),
     sideChatsAtom: (ref: ScopedThreadRef) => sideChatsAtomFamily(threadKey(ref)),
+    subagentChildrenAtom: (ref: ScopedThreadRef) => subagentChildrenAtomFamily(threadKey(ref)),
   };
 }

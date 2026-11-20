@@ -3372,6 +3372,8 @@
   "0e7b21ab11721ca7": "Aucune commande correspondante.",
   "2029db2cc30beb6d": "Ouvrir les paramètres des fournisseurs",
   "517cfb8f24123f5b": "Aucun fournisseur disponible",
+  "6c148396b14a18e2": "Coordinateur : délègue l’implémentation à des workers",
+  "125f716cb3237567": "Faire de ce fil un coordinateur",
   "7ff1a0ef1490668d": "L’API Presse-papiers n’est pas disponible pour copier l’ID du fil de feedback Codex.",
   "1967731535386826": "Impossible de copier l’ID du fil de feedback Codex dans le presse-papiers.",
   "9c5afbfbbe8b305d": "Impossible de copier l’ID du fil",
@@ -12171,5 +12173,11 @@
   "27d76249d09eb69f": "Guide de revue prêt",
   "faa3bb26abb39c93": "Échec du guide de revue",
   "b7df38b7d8792d78": "Ouvrir le guide",
-  "9e91e9a77b664e4e": "Impossible de démarrer un guide de revue"
+  "9e91e9a77b664e4e": "Impossible de démarrer un guide de revue",
+  "94253da34149f9fb": "{count, plural, one {{count} en cours} other {{count} en cours}}",
+  "eec771021e6c5d49": "{count, plural, one {{count} attend une réponse} other {{count} attendent une réponse}}",
+  "51ffaef4f1687539": "{count, plural, one {{count} en échec} other {{count} en échec}}",
+  "66b20c1a4015e2a8": "{count, plural, one {{count} terminé} other {{count} terminés}}",
+  "5d8a31c5377ec3d7": "Masquer les sous-agents : {summary}",
+  "35376d3144ad77f3": "Afficher les sous-agents : {summary}"
 }

@@ -3372,6 +3372,8 @@
   "0e7b21ab11721ca7": "Nenhum comando correspondente.",
   "2029db2cc30beb6d": "Abrir configurações do provedor",
   "517cfb8f24123f5b": "Nenhum provedor disponível",
+  "6c148396b14a18e2": "Coordenador: delega a implementação a workers",
+  "125f716cb3237567": "Tornar esta thread coordenadora",
   "7ff1a0ef1490668d": "A API da área de transferência não está disponível ao copiar o ID da thread de feedback do Codex.",
   "1967731535386826": "Falha ao copiar o ID da thread de feedback do Codex para a área de transferência.",
   "9c5afbfbbe8b305d": "Não foi possível copiar o ID da thread",
@@ -12170,5 +12172,11 @@
   "27d76249d09eb69f": "Guia de revisão pronto",
   "faa3bb26abb39c93": "O guia de revisão falhou",
   "b7df38b7d8792d78": "Abrir guia",
-  "9e91e9a77b664e4e": "Não foi possível iniciar um guia de revisão"
+  "9e91e9a77b664e4e": "Não foi possível iniciar um guia de revisão",
+  "94253da34149f9fb": "{count, plural, one {{count} trabalhando} other {{count} trabalhando}}",
+  "eec771021e6c5d49": "{count, plural, one {{count} precisa de resposta} other {{count} precisam de resposta}}",
+  "51ffaef4f1687539": "{count, plural, one {{count} com falha} other {{count} com falha}}",
+  "66b20c1a4015e2a8": "{count, plural, one {{count} concluído} other {{count} concluídos}}",
+  "5d8a31c5377ec3d7": "Ocultar subagentes: {summary}",
+  "35376d3144ad77f3": "Mostrar subagentes: {summary}"
 }

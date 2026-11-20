@@ -189,6 +189,8 @@ type ShellTrimRow = Pick<
 interface ShellTrimFacts {
   readonly subagentParentIds: ReadonlySet<string>;
   readonly subagentThreadIds: Set<string>;
+  /** Subagents under a listed thread the older-settled trim keeps; sidebars nest them there. */
+  readonly listedTreeSubagentIds: ReadonlySet<string>;
   /** Only the store's index knows these; shells alone leave it empty. */
   readonly remoteTaskParentIds: ReadonlySet<string>;
   /** Undefined when no thread is settled, so none is older. */
@@ -227,13 +229,42 @@ function shellTrimFacts(rows: ReadonlyArray<ShellTrimRow>): ShellTrimFacts {
       }
     }
   }
+  const byId = new Map(rows.map((row) => [row.id, row] as const));
+  const listedTreeSubagentIds = new Set<string>();
+  for (const row of rows) {
+    if (row.lineage.relationshipToParent !== "subagent") continue;
+    const ancestor = listedAncestor(row, byId);
+    if (
+      ancestor !== undefined &&
+      (olderSettledBeforeMs === undefined ||
+        !isOlderSettledThreadShell(ancestor, olderSettledBeforeMs))
+    ) {
+      listedTreeSubagentIds.add(row.id);
+    }
+  }
   return {
     subagentParentIds,
     subagentThreadIds,
+    listedTreeSubagentIds,
     remoteTaskParentIds,
     olderSettledBeforeMs,
     olderSettledCounts: Array.from(counts, ([projectId, count]) => ({ projectId, count })),
   };
+}
+
+/** The listed thread a subagent chain hangs from; undefined for a broken chain or a side chat. */
+function listedAncestor(
+  row: ShellTrimRow,
+  byId: ReadonlyMap<string, ShellTrimRow>,
+): ShellTrimRow | undefined {
+  const seen = new Set<string>();
+  let current: ShellTrimRow | undefined = row;
+  while (current !== undefined && current.lineage.relationshipToParent === "subagent") {
+    if (seen.has(current.id) || current.lineage.parentThreadId === null) return undefined;
+    seen.add(current.id);
+    current = byId.get(current.lineage.parentThreadId);
+  }
+  return current !== undefined && isListedThreadLineage(current.lineage) ? current : undefined;
 }
 
 function hiddenChildAncestorIds(
@@ -250,13 +281,17 @@ function hiddenChildAncestorIds(
 
 function omitIdleSubagentShellsWith(
   threads: ReadonlyArray<OrchestrationV2ThreadShell>,
-  facts: Pick<ShellTrimFacts, "subagentParentIds" | "remoteTaskParentIds">,
+  facts: Pick<
+    ShellTrimFacts,
+    "subagentParentIds" | "listedTreeSubagentIds" | "remoteTaskParentIds"
+  >,
 ): ReadonlyArray<OrchestrationV2ThreadShell> {
   return threads.filter(
     (thread) =>
       thread.lineage.relationshipToParent !== "subagent" ||
       isLiveSubagentShell(thread) ||
       facts.subagentParentIds.has(thread.id) ||
+      facts.listedTreeSubagentIds.has(thread.id) ||
       facts.remoteTaskParentIds.has(thread.id),
   );
 }
@@ -298,10 +333,9 @@ function omitOlderSettledShellsWith(
 }
 
 /**
- * Idle subagent children have no sidebar row, so clients that opt in read them from their thread
- * family instead. A child stays while it is live or the parent of another child, so the request
- * and working walks over shell rows never meet a gap in a nested chain. It also stays as the
- * parent of a task in a linked environment, whose clients nest that task under it.
+ * Other idle subagents load from their thread family. A child stays while live or above another
+ * child, so walks over shell rows meet no gap; above a linked environment's task, which nests
+ * there; or under a listed thread that is not an older settled one, whose sidebar row nests it.
  */
 export function omitIdleSubagentShells(
   threads: ReadonlyArray<OrchestrationV2ThreadShell>,
@@ -380,7 +414,8 @@ function shellSubscriberThreadIds(
       (!options.omitIdleSubagents ||
         entry.mayBeLive ||
         entry.hasRemoteTasks ||
-        facts.subagentParentIds.has(entry.id)),
+        facts.subagentParentIds.has(entry.id) ||
+        facts.listedTreeSubagentIds.has(entry.id)),
   );
   const ancestorIds = hiddenChildAncestorIds([
     ...subagents,

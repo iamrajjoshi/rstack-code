@@ -682,6 +682,66 @@ describe("v2 thread shell lists", () => {
       harness.registry.dispose();
     }
   });
+
+  it("lists a thread's subagents in creation order, through streaming ticks, without forks or side chats", () => {
+    const { registry, threads, snapshotAtom } = makeHarness();
+    const root = v2ThreadShell;
+    const runId = RunId.make("worker-run");
+    const subagent = (id: string, parent: ThreadId, createdSeconds: number) => ({
+      ...root,
+      id: ThreadId.make(id),
+      createdAt: DateTime.add(v2Now, { seconds: createdSeconds }),
+      lineage: {
+        ...root.lineage,
+        parentThreadId: parent,
+        relationshipToParent: "subagent" as const,
+      },
+    });
+    const later = subagent("later", root.id, 2);
+    const earlier = {
+      ...subagent("earlier", root.id, 1),
+      latestRunId: runId,
+      activeRunId: runId,
+      status: "running" as const,
+      itemCount: 1,
+      visibleItemCount: 1,
+    };
+    const grandchild = subagent("grandchild", earlier.id, 3);
+    const fork = {
+      ...later,
+      id: ThreadId.make("fork"),
+      lineage: { ...later.lineage, relationshipToParent: "fork" as const },
+    };
+    const sideChat = {
+      ...fork,
+      id: ThreadId.make("side-chat"),
+      lineage: { ...fork.lineage, sideChat: true },
+    };
+    const archived = { ...subagent("archived", root.id, 0), archivedAt: v2Now };
+    const setThreads = (rows: ReadonlyArray<OrchestrationV2ThreadShell>) =>
+      registry.set(snapshotAtom(environmentId), { ...v2ShellSnapshot, threads: rows });
+    setThreads([root, later, earlier, grandchild, fork, sideChat, archived]);
+    const children = threads.subagentChildrenAtom({ environmentId, threadId: root.id });
+    const nested = threads.subagentChildrenAtom({ environmentId, threadId: earlier.id });
+    const dispose = registry.mount(children);
+    const disposeNested = registry.mount(nested);
+    try {
+      const first = registry.get(children);
+      expect(first.map((thread) => thread.id)).toEqual([earlier.id, later.id]);
+      expect(registry.get(nested).map((thread) => thread.id)).toEqual([grandchild.id]);
+
+      setThreads([root, later, { ...earlier, itemCount: 5 }, grandchild, fork, sideChat, archived]);
+      expect(registry.get(children)).toBe(first);
+
+      setThreads([root, later, { ...earlier, activeRunId: null, status: "completed" }, grandchild]);
+      expect(registry.get(children)).not.toBe(first);
+      expect(registry.get(children)[0]?.runtime?.status).toBe("completed");
+    } finally {
+      disposeNested();
+      dispose();
+      registry.dispose();
+    }
+  });
 });
 
 describe("resolveListedAncestorThreadRef", () => {

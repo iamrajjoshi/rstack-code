@@ -3373,6 +3373,8 @@
   "0e7b21ab11721ca7": "Kein passender Befehl.",
   "2029db2cc30beb6d": "Anbietereinstellungen öffnen",
   "517cfb8f24123f5b": "Kein Anbieter verfügbar",
+  "6c148396b14a18e2": "Koordinator: delegiert die Umsetzung an Worker",
+  "125f716cb3237567": "Diesen Thread zum Koordinator machen",
   "7ff1a0ef1490668d": "Die Zwischenablage-API ist beim Kopieren der Codex-Feedback-Thread-ID nicht verfügbar.",
   "1967731535386826": "Die Codex-Feedback-Thread-ID konnte nicht in die Zwischenablage kopiert werden.",
   "9c5afbfbbe8b305d": "Thread-ID konnte nicht kopiert werden",
@@ -12171,5 +12173,11 @@
   "27d76249d09eb69f": "Review-Leitfaden bereit",
   "faa3bb26abb39c93": "Review-Leitfaden fehlgeschlagen",
   "b7df38b7d8792d78": "Leitfaden öffnen",
-  "9e91e9a77b664e4e": "Review-Leitfaden konnte nicht gestartet werden"
+  "9e91e9a77b664e4e": "Review-Leitfaden konnte nicht gestartet werden",
+  "94253da34149f9fb": "{count, plural, one {{count} arbeitet} other {{count} arbeiten}}",
+  "eec771021e6c5d49": "{count, plural, one {{count} wartet auf Eingabe} other {{count} warten auf Eingabe}}",
+  "51ffaef4f1687539": "{count, plural, one {{count} fehlgeschlagen} other {{count} fehlgeschlagen}}",
+  "66b20c1a4015e2a8": "{count, plural, one {{count} fertig} other {{count} fertig}}",
+  "5d8a31c5377ec3d7": "Subagents ausblenden: {summary}",
+  "35376d3144ad77f3": "Subagents einblenden: {summary}"
 }

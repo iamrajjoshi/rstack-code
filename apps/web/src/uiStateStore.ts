@@ -23,6 +23,7 @@ export interface PersistedUiState {
   projectExpandedById?: Record<string, boolean>;
   projectOrder?: string[];
   threadLastVisitedAtById?: Record<string, string>;
+  threadChildrenExpandedById?: Record<string, boolean>;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
@@ -42,6 +43,8 @@ export interface UiProjectState {
 
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
+  /** Sidebar subagent lists the user opened or closed, by thread key; absent follows activity. */
+  threadChildrenExpandedById: Record<string, boolean>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
 }
 
@@ -61,6 +64,7 @@ const initialState: UiState = {
   projectOrder: [],
   sidebarProjectScopeKeys: [],
   threadLastVisitedAtById: {},
+  threadChildrenExpandedById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
   pullRequestMergeMethod: "merge",
@@ -145,6 +149,7 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
     projectExpandedById,
     projectOrder,
     threadLastVisitedAtById: sanitizeTimestampRecord(parsed.threadLastVisitedAtById),
+    threadChildrenExpandedById: sanitizeBooleanRecord(parsed.threadChildrenExpandedById),
     threadChangedFilesExpandedById:
       parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
         ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
@@ -220,6 +225,7 @@ export function persistState(state: UiState): void {
         projectExpandedById: state.projectExpandedById,
         projectOrder: state.projectOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
+        threadChildrenExpandedById: state.threadChildrenExpandedById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         sidebarProjectScopeKeys: state.sidebarProjectScopeKeys,
         // Older clients read only this field.
@@ -312,6 +318,15 @@ function setThreadChangedFilesExpanded(
       },
     },
   };
+}
+
+function setThreadChildrenExpanded(state: UiState, threadKey: string, expanded: boolean): UiState {
+  return state.threadChildrenExpandedById[threadKey] === expanded
+    ? state
+    : {
+        ...state,
+        threadChildrenExpandedById: { ...state.threadChildrenExpandedById, [threadKey]: expanded },
+      };
 }
 
 function setDefaultAdvertisedEndpointKey(state: UiState, key: string | null): UiState {
@@ -426,6 +441,7 @@ interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
+  setThreadChildrenExpanded: (threadKey: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setSidebarProjectScopeKeys: (projectKeys: readonly string[]) => void;
   setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
@@ -445,6 +461,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  setThreadChildrenExpanded: (threadKey, expanded) =>
+    set((state) => setThreadChildrenExpanded(state, threadKey, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   setSidebarProjectScopeKeys: (projectKeys) =>

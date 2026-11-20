@@ -729,12 +729,15 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
       }) as unknown as OrchestrationV2ThreadShell;
     const threads = [
       shell("parent", null, null),
-      shell("idle", "parent", null),
+      // Under an older settled thread, which leaves the sidebar's list.
+      shell("idle", "old", null),
       shell("live", "parent", "running"),
       ...Array.from({ length: 25 }, (_, index) => shell(`recent-${index}`, null, null, 1)),
       shell("old", null, null, 30),
       shell("remote-parent", null, null, 40),
       shell("remote-child-parent", "parent", null),
+      // A listed thread's sidebar row nests its idle children.
+      shell("nested", "parent", null),
     ];
     const firstSnapshot = (input: {
       readonly omitIdleSubagents?: boolean;
@@ -795,14 +798,14 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
     const withoutChildren = yield* firstSnapshot({ omitIdleSubagents: true });
     assert.deepEqual(
       withoutChildren?.threads.map((thread) => thread.id),
-      ["parent", "live", ...recent, "old", "remote-parent", "remote-child-parent"],
+      ["parent", "live", ...recent, "old", "remote-parent", "remote-child-parent", "nested"],
     );
     // A linked environment's clients nest its task under its parent, so that parent stays: an
     // older settled thread or an idle subagent.
     const withoutOld = yield* firstSnapshot({ omitIdleSubagents: true, omitOlderSettled: true });
     assert.deepEqual(
       withoutOld?.threads.map((thread) => thread.id),
-      ["parent", "live", ...recent, "remote-parent", "remote-child-parent"],
+      ["parent", "live", ...recent, "remote-parent", "remote-child-parent", "nested"],
     );
     assert.deepEqual(withoutOld?.olderSettled?.counts, [
       { projectId: ProjectId.make("project"), count: 2 },

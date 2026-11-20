@@ -3372,6 +3372,8 @@
   "0e7b21ab11721ca7": "Inget matchande kommando.",
   "2029db2cc30beb6d": "Öppna leverantörsinställningar",
   "517cfb8f24123f5b": "Ingen leverantör tillgänglig",
+  "6c148396b14a18e2": "Koordinator: delegerar implementeringen till arbetare",
+  "125f716cb3237567": "Gör den här tråden till koordinator",
   "7ff1a0ef1490668d": "Urklipps-API:t är inte tillgängligt vid kopiering av tråd-ID:t för Codex-feedback.",
   "1967731535386826": "Kunde inte kopiera tråd-ID:t för Codex-feedback till urklipp.",
   "9c5afbfbbe8b305d": "Kunde inte kopiera tråd-ID",
@@ -12178,5 +12180,11 @@
   "27d76249d09eb69f": "Granskningsguiden är klar",
   "faa3bb26abb39c93": "Granskningsguiden misslyckades",
   "b7df38b7d8792d78": "Öppna guiden",
-  "9e91e9a77b664e4e": "Kunde inte starta en granskningsguide"
+  "9e91e9a77b664e4e": "Kunde inte starta en granskningsguide",
+  "94253da34149f9fb": "{count, plural, one {{count} arbetar} other {{count} arbetar}}",
+  "eec771021e6c5d49": "{count, plural, one {{count} behöver indata} other {{count} behöver indata}}",
+  "51ffaef4f1687539": "{count, plural, one {{count} misslyckad} other {{count} misslyckade}}",
+  "66b20c1a4015e2a8": "{count, plural, one {{count} klar} other {{count} klara}}",
+  "5d8a31c5377ec3d7": "Dölj subagenter: {summary}",
+  "35376d3144ad77f3": "Visa subagenter: {summary}"
 }
