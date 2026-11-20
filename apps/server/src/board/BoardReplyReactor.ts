@@ -70,7 +70,8 @@ export const boardDelivery = (
     return {
       key: `reply:${event.message.id}`,
       threadId,
-      text: `[rstack-board] ${context.person} replied on board thread ${event.threadId}:\n${event.message.text}`,
+      // The closing line sends the agent's answer back to the board, where the person wrote.
+      text: `[rstack-board] ${context.person} replied on board thread ${event.threadId}:\n${event.message.text}\n[rstack-board] Answer with board_reply on board thread ${event.threadId}, then continue.`,
     };
   }
   const changes = [

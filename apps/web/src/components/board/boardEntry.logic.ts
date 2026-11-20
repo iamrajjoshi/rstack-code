@@ -25,6 +25,16 @@ export function openOnBoardVisible(
  */
 export type BoardOpenTarget = "panel" | "tab" | "address";
 
+/**
+ * The board's address with `?theme=` set to the app's appearance, which the board's page uses
+ * for that tab instead of the browser's `prefers-color-scheme`. Its `#/...` route is kept.
+ */
+export function boardUrlWithTheme(url: string, appearance: "light" | "dark"): string {
+  const themed = new URL(url);
+  themed.searchParams.set("theme", appearance);
+  return themed.toString();
+}
+
 export function boardOpenTarget(input: {
   readonly previewAvailable: boolean;
   readonly reachesServerLoopback: boolean;

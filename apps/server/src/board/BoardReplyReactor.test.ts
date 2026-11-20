@@ -148,7 +148,7 @@ describe("BoardReplyReactor", () => {
             mode: "queue",
             createdBy: "user",
             creationSource: "server",
-            text: "[rstack-board] raj replied on board thread msg_mine:\nUse the new analyzer.",
+            text: "[rstack-board] raj replied on board thread msg_mine:\nUse the new analyzer.\n[rstack-board] Answer with board_reply on board thread msg_mine, then continue.",
           });
 
           yield* Queue.offerAll(events, [

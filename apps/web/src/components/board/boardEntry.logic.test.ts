@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { boardEntryVisible, boardOpenTarget, openOnBoardVisible } from "./boardEntry.logic";
+import {
+  boardEntryVisible,
+  boardOpenTarget,
+  boardUrlWithTheme,
+  openOnBoardVisible,
+} from "./boardEntry.logic";
 
 const ready = { boardEnabled: true, canOpen: true, hasThread: true };
 
@@ -44,5 +49,22 @@ describe("boardOpenTarget", () => {
     },
   ] as const)("$name", ({ input, target }) => {
     expect(boardOpenTarget(input)).toBe(target);
+  });
+});
+
+describe("boardUrlWithTheme", () => {
+  it("adds the app's appearance before the board's hash route", () => {
+    expect(boardUrlWithTheme("http://127.0.0.1:4477/#/c/artemis/", "dark")).toBe(
+      "http://127.0.0.1:4477/?theme=dark#/c/artemis/",
+    );
+    expect(boardUrlWithTheme("http://127.0.0.1:4477/", "light")).toBe(
+      "http://127.0.0.1:4477/?theme=light",
+    );
+  });
+
+  it("replaces a theme already in the address", () => {
+    expect(boardUrlWithTheme("http://127.0.0.1:4477/?theme=light", "dark")).toBe(
+      "http://127.0.0.1:4477/?theme=dark",
+    );
   });
 });

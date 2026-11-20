@@ -61,7 +61,8 @@ instructions.
 
 When you reply on a board thread that carries a thread's `t3` and `env` labels,
 such as a worker's check-in, the reply reaches that thread as a queued message
-that starts with `[rstack-board]` and the board thread's id. Approving, holding
+that starts with `[rstack-board]` and the board thread's id, and ends by asking
+the agent to answer on that board thread. Approving, holding
 or releasing it, or clearing what it needs, arrives as a one-line note the same
 way. Only what you write on the board's own page is sent, each once; posts by
 agents, including ones made with the CLI under your name, are never sent to

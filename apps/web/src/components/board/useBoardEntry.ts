@@ -15,6 +15,7 @@ import {
 } from "../../browser/browserTargetResolver";
 import { openUrlInPreview } from "../../browser/openFileInPreview";
 import { isPreviewAvailableFor, previewRuntimeFor } from "../../browser/previewRuntime";
+import { getRenderedAppearance } from "../../hooks/useTheme";
 import { m } from "../../i18n/messages";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { readEnvironmentBoardEnabled, useServerConfigs } from "../../state/entities";
@@ -22,7 +23,12 @@ import { previewEnvironment } from "../../state/preview";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
-import { boardEntryVisible, type BoardEntryState, boardOpenTarget } from "./boardEntry.logic";
+import {
+  boardEntryVisible,
+  type BoardEntryState,
+  boardOpenTarget,
+  boardUrlWithTheme,
+} from "./boardEntry.logic";
 
 /** For menus built when they open, such as a sidebar row's. */
 export function readBoardEntryState(environmentId: EnvironmentId): BoardEntryState {
@@ -90,7 +96,8 @@ export function useOpenBoard(): (
         input: options?.coordinatorView ? { threadId: threadRef.threadId } : {},
       });
       if (opened._tag === "Failure") return fail(failure(opened), true);
-      const url = opened.value.url;
+      // The board follows the app's appearance rather than the browser's, which may differ.
+      const url = boardUrlWithTheme(opened.value.url, getRenderedAppearance());
       if (target === "panel") {
         const shown = await openUrlInPreview({
           threadRef,
