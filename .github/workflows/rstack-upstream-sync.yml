@@ -1,0 +1,225 @@
+# rstack-code: merges upstream T3 Code into main, gates the merge, and releases it.
+# scripts/rstack-sync-upstream.ts does the merge and the checks, so a local run behaves the same.
+# It never force-pushes main and never changes .github/workflows. See docs/operations/rstack-fork.md.
+name: rstack upstream sync
+
+on:
+  # Upstream ships several commits an hour and a stable release every few days. Four runs a day
+  # keep each merge small enough to resolve without paying for a gate run every hour.
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Upstream branch, tag, or commit to sync to.
+        required: false
+        default: main
+        type: string
+      dry_run:
+        description: Merge and run the checks, but push nothing and touch no issue.
+        required: false
+        default: false
+        type: boolean
+      release:
+        description: Release the merged commit when main changed.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rstack-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Merge upstream
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      issues: write
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      merge_commit: ${{ steps.push.outputs.merge_commit }}
+    env:
+      UPSTREAM_REF: ${{ inputs.ref || 'main' }}
+      DRY_RUN: ${{ inputs.dry_run == true }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_TITLE: Upstream sync needs attention
+      ISSUE_LABEL: rstack-sync
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+          # Optional: a token with the workflows permission, only needed if GitHub rejects
+          # GITHUB_TOKEN pushes whose upstream commits touch workflow files.
+          token: ${{ secrets.RSTACK_SYNC_TOKEN || github.token }}
+
+      - id: check
+        name: Check for upstream changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "REPORT=$RUNNER_TEMP/rstack-sync.json" >> "$GITHUB_ENV"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/pingdotgg/t3code.git
+          git fetch --quiet --no-tags upstream "$UPSTREAM_REF"
+          target="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          echo "old_main=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor "$target" HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup dependencies
+        if: steps.check.outputs.changed == 'true'
+        uses: ./.github/actions/setup-ci-deps
+
+      - id: merge
+        name: Merge upstream
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(merge --ref "$UPSTREAM_REF" --report "$REPORT" --on-conflict commit)
+          if [[ "$DRY_RUN" == "true" ]]; then args+=(--dry-run); fi
+          set +e
+          node scripts/rstack-sync-upstream.ts "${args[@]}"
+          code=$?
+          set -e
+          # 0 merged or dry run, 1 conflicts (reported), anything else is a script failure.
+          if [[ "$code" -gt 1 ]]; then exit "$code"; fi
+          echo "status=$(jq -r .status "$REPORT")" >> "$GITHUB_OUTPUT"
+          echo "short=$(jq -r '.target[0:10]' "$REPORT")" >> "$GITHUB_OUTPUT"
+
+      - id: gate
+        name: Gate the merge
+        if: steps.merge.outputs.status == 'merged'
+        shell: bash
+        env:
+          CHECK_CHANGED_TIMEOUT: "3600"
+        run: |
+          set -euo pipefail
+          if node scripts/rstack-sync-upstream.ts gate --report "$REPORT"; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: push
+        name: Push main
+        if: steps.gate.outputs.passed == 'true' && env.DRY_RUN != 'true'
+        shell: bash
+        env:
+          OLD_MAIN: ${{ steps.check.outputs.old_main }}
+        run: |
+          set -euo pipefail
+          # A plain push only fast-forwards; a main that moved meanwhile rejects it.
+          git push origin HEAD:refs/heads/main
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+          echo "merge_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          setup="$(git ls-remote origin refs/heads/raj--rstack--fork-setup | cut -f1)"
+          if [[ -n "$setup" && "$setup" == "$OLD_MAIN" ]]; then
+            git push origin HEAD:refs/heads/raj--rstack--fork-setup
+          fi
+
+      - id: attempt
+        name: Push the attempt for review
+        if: >-
+          env.DRY_RUN != 'true' &&
+          (steps.merge.outputs.status == 'conflicts' || steps.gate.outputs.passed == 'false')
+        shell: bash
+        env:
+          SHORT: ${{ steps.merge.outputs.short }}
+        run: |
+          set -euo pipefail
+          branch="rstack-sync/$SHORT"
+          if git push --force origin "HEAD:refs/heads/$branch"; then
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not push $branch; the issue lists the local commands instead."
+          fi
+
+      - name: Open or update the attention issue
+        if: steps.attempt.outcome == 'success'
+        shell: bash
+        env:
+          BRANCH: ${{ steps.attempt.outputs.branch }}
+        run: |
+          set -euo pipefail
+          args=(issue-body --from "$REPORT" --run-url "$RUN_URL")
+          if [[ -n "$BRANCH" ]]; then args+=(--branch "$BRANCH"); fi
+          node scripts/rstack-sync-upstream.ts "${args[@]}" > "$RUNNER_TEMP/issue.md"
+          gh label create "$ISSUE_LABEL" --repo "$GITHUB_REPOSITORY" --color D93F0B \
+            --description "Automatic upstream sync" --force > /dev/null
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$ISSUE_LABEL" \
+            --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$number" ]]; then
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" \
+              --label "$ISSUE_LABEL" --body-file "$RUNNER_TEMP/issue.md"
+          fi
+
+      - name: Close the attention issue
+        if: >-
+          env.DRY_RUN != 'true' &&
+          (steps.check.outputs.changed == 'false' || steps.push.outputs.pushed == 'true')
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$ISSUE_LABEL" \
+            --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$number" ]]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" \
+              --comment "Synced: main now contains upstream $(git rev-parse --short=10 FETCH_HEAD). $RUN_URL"
+          fi
+
+      - name: Write run summary
+        if: always()
+        shell: bash
+        env:
+          CHANGED: ${{ steps.check.outputs.changed }}
+          PUSHED: ${{ steps.push.outputs.pushed == 'true' && 'yes, main fast-forwarded' || 'no' }}
+          RELEASE: ${{ github.event_name == 'schedule' || inputs.release == true }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGED" == "false" ]]; then
+            echo "### Upstream sync" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "main already contains upstream \`$UPSTREAM_REF\`. Nothing released." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -f "${REPORT:-}" ]]; then
+            node scripts/rstack-sync-upstream.ts summary --from "$REPORT" --pushed "$PUSHED" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$PUSHED" == "no" || "$RELEASE" != "true" ]]; then
+              echo "- Release: none (main did not change or release was off)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- Release: see the Release jobs below" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          # Scheduled workflows stop after 60 days without repository activity.
+          last="$(git log -1 --format=%ct origin/main)"
+          if (( $(date +%s) - last > 45 * 86400 )); then
+            echo "::warning::main has not changed in 45 days; GitHub disables this schedule at 60. Resolve the attention issue or push to main."
+          fi
+
+  release:
+    name: Release
+    needs: sync
+    if: >-
+      needs.sync.outputs.pushed == 'true' &&
+      (github.event_name == 'schedule' || inputs.release == true)
+    permissions:
+      contents: write
+    uses: ./.github/workflows/rstack-release.yml
+    with:
+      ref: ${{ needs.sync.outputs.merge_commit }}
+      desktop: true
+    secrets: inherit
