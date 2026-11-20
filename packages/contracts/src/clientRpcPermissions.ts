@@ -26,10 +26,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.serverReclaimDatabaseSpace]: AuthEnvironmentMaintainScope,
   [WS_METHODS.serverCheckOtlpEndpoint]: AuthSettingsWriteScope,
   [WS_METHODS.serverCheckSecretSource]: AuthSettingsWriteScope,
-  // Runs the configured board CLI on this machine.
-  [WS_METHODS.boardStatus]: AuthSettingsWriteScope,
-  // Can start the board's server, whose page writes as the person.
-  [WS_METHODS.boardOpen]: AuthSettingsWriteScope,
+  // The board's page writes as the person and its replies reach threads, as sending a message does.
+  [WS_METHODS.boardStatus]: AuthOrchestrationOperateScope,
+  [WS_METHODS.boardOpen]: AuthOrchestrationOperateScope,
   // Listing models spends the stored API key, so only those who can choose a model may.
   [WS_METHODS.serverListTextGeneratorModels]: AuthSettingsWriteScope,
   [WS_METHODS.serverRefreshProviders]: AuthOrchestrationReadScope,

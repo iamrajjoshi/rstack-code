@@ -11,7 +11,10 @@ export function isAppModalPage(pathname: string) {
 
 export function isSidebarUtilityPage(pathname: string) {
   return (
-    pathname.startsWith("/projects/") || pathname === "/pull-requests" || pathname === "/issues"
+    pathname.startsWith("/projects/") ||
+    pathname === "/pull-requests" ||
+    pathname === "/issues" ||
+    pathname === "/board"
   );
 }
 
@@ -21,6 +24,7 @@ export function isSidebarUtilityPage(pathname: string) {
 const SHELL_LESS_PATHS = new Set(["/pair", "/connect", "/connect-agent", GUEST_PAGE_PATH]);
 
 let mainAppHref: string | null = null;
+let mainAppThreadTarget: ThreadRouteTarget | null = null;
 let appModalReturnHref: string | null = null;
 let appModalReturnHistoryIndex: number | null = null;
 let appModalReturnThreadTarget: ThreadRouteTarget | null = null;
@@ -40,7 +44,10 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
     appModalReturnThreadTarget = resolveThreadRouteTarget(
       router.state.matches.at(-1)?.params ?? {},
     );
-    if (!isSidebarUtilityPage(pathname)) mainAppHref = href;
+    if (!isSidebarUtilityPage(pathname)) {
+      mainAppHref = href;
+      mainAppThreadTarget = appModalReturnThreadTarget;
+    }
   };
   record();
   return router.subscribe("onResolved", record);
@@ -49,6 +56,11 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
 /** The thread Settings or Usage opened over, for views mounted while the modal is open. */
 export function getAppModalReturnThreadTarget() {
   return appModalReturnThreadTarget;
+}
+
+/** The thread the last main-app view showed, for utility pages that start from it. */
+export function getMainAppThreadTarget() {
+  return mainAppThreadTarget;
 }
 
 export function useNavigateToMainApp() {

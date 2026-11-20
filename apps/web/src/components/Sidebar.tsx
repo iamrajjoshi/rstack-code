@@ -165,7 +165,7 @@ import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { canShareWithGuestAtom } from "./chat/guestShareAvailability";
 import { openOnBoardVisible } from "./board/boardEntry.logic";
-import { readBoardEntryState, useOpenBoard } from "./board/useBoardEntry";
+import { readBoardEntryState, useOpenBoardPage } from "./board/useBoardEntry";
 import { openGuestShareDialog } from "./chat/guestShareDialogState";
 import {
   buildThreadRouteParams,
@@ -1007,7 +1007,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
-  const openBoard = useOpenBoard();
+  const openBoardPage = useOpenBoardPage();
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onError: (error) => {
       toastManager.add(
@@ -2947,7 +2947,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             openGuestShareDialog(threadRef);
             return;
           case "open-on-board":
-            await openBoard(threadRef, { coordinatorView: true });
+            await openBoardPage(threadRef);
             return;
           case "regenerate-title": {
             if (isRegeneratingTitle) return;

@@ -260,7 +260,7 @@ import {
   PORT_FORWARD_GROUP_PREFIX,
   useCommandPalettePortForwardItem,
 } from "./CommandPalettePortForwardItems";
-import { useBoardEntry } from "./board/useBoardEntry";
+import { useBoardEnvironments } from "./board/useBoardEntry";
 import {
   CommandPaletteVirtualizedResults,
   scrollCommandPaletteRowIntoView,
@@ -558,9 +558,7 @@ function OpenCommandPaletteDialog(props: {
     activeThread: activeThread ?? null,
     query: deferredQuery,
   });
-  const board = useBoardEntry(
-    activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null,
-  );
+  const boardAvailable = useBoardEnvironments().length > 0;
   const currentView = viewStack.at(-1)?.view ?? null;
   const threadSearchQuery = currentView === null && !isActionsOnly ? deferredQuery : "";
   const [browseGeneration, setBrowseGeneration] = useState(0);
@@ -1556,14 +1554,16 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  if (board.visible) {
+  if (boardAvailable) {
     actionItems.push({
       kind: "action",
       value: "action:open-board",
       searchTerms: ["board", "rstack-board", "check in", "status", "workers", "needs you"],
       title: gt("Open board"),
       icon: <MessagesSquareIcon className={ITEM_ICON_CLASS} />,
-      run: () => board.open(),
+      run: async () => {
+        await navigate({ to: "/board" });
+      },
     });
   }
 

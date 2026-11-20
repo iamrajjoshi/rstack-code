@@ -29,8 +29,10 @@ import {
   SNAP_SHOT_EVENT_CHANNEL,
   TRACKPAD_SCROLL_BEGIN_CHANNEL,
   TRACKPAD_SCROLL_END_CHANNEL,
+  WEB_LINK_OPEN_CHANNEL,
   WINDOW_FULLSCREEN_STATE_CHANNEL,
 } from "../ipc/channels.ts";
+import { framedAppThreadLink } from "./FramedAppLink.ts";
 import {
   PASSKEY_BRIDGE_ARGUMENT,
   PRIMARY_PASTE_DISABLED_ARGUMENT,
@@ -777,6 +779,16 @@ export const make = Effect.gen(function* () {
       if (Option.isSome(ElectronShell.parseSafeExternalUrl(url))) {
         void runPromise(electronShell.openExternal(url));
       }
+    });
+    window.webContents.on("will-frame-navigate", (event) => {
+      const link = framedAppThreadLink({
+        url: event.url,
+        isMainFrame: event.isMainFrame,
+        initiatorUrl: event.initiator?.url,
+      });
+      if (link === null) return;
+      event.preventDefault();
+      window.webContents.send(WEB_LINK_OPEN_CHANNEL, link);
     });
 
     const quitShortcutHandler = makeQuitShortcutHandler({

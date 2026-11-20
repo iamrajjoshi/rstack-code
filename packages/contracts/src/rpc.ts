@@ -1055,7 +1055,7 @@ const WsServerCheckOtlpEndpointRpc = Rpc.make(WS_METHODS.serverCheckOtlpEndpoint
   error: EnvironmentAuthorizationError,
 });
 
-// Runs the board CLI, so it is a settings action rather than a free read.
+// Runs the board CLI, so it needs the grant to operate threads rather than a free read.
 const WsBoardStatusRpc = Rpc.make(WS_METHODS.boardStatus, {
   payload: Schema.Struct({}),
   success: BoardStatus,

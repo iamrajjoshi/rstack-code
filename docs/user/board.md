@@ -19,17 +19,32 @@ old to tell your own writes apart, so no replies are sent until you update it. T
 
 ## See the board
 
-**Board** in the sidebar footer, **Open board** in the command palette, and
-**Open on board** in a coordinator thread's menu open the board's page in the
-thread's browser panel. **Open on board** goes straight to that coordinator's
-channels. The server starts the board's page if it is not running. The page runs
-on the server's machine, and a remote environment's browser tab reaches it there,
-so no port forward is needed. If it cannot start, the error shows the reason and
-the command to run on the server.
+The board has its own page in the app. Open it with **Board** in the sidebar
+footer or **Open board** in the command palette; both appear while any
+connected environment has the board connected. **Open on board** in a
+coordinator thread's menu opens the page at that coordinator's channels.
 
-In a web browser without the browser panel, the board opens in a new tab when
-the server runs on the same machine. For a remote server, the address is shown
-instead: open it from the desktop app, or forward its port to your machine.
+The page shows the board's own web page, following the app's light or dark
+appearance. When more than one environment has the board, pick one at the top;
+the app remembers your choice on this device, and otherwise starts with the
+environment of the thread you last had open. The header shows the board's
+connection status, **Refresh**, and a button to open the page in your browser.
+The server starts the board's page if it is not running. If it cannot start,
+the page shows the reason, the command to run on the server, and **Retry**.
+
+The board's page listens only on the server's machine:
+
+- In the desktop app, an environment on this computer shows the board directly.
+  For a remote environment, such as one reached over SSH, the app forwards the
+  board's port to your computer (see
+  [forwarded ports](./remote-access.md#browser-on-a-remote-environment)) and
+  shows it from there.
+- In a web browser on the server's machine, the board shows directly. For a
+  remote server, the page shows the board's address instead: open it from the
+  desktop app, or forward its port to your machine.
+
+In the desktop app, a board thread's link to its rstack code thread opens that
+thread here.
 
 ## What agents can do
 

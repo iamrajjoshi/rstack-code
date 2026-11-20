@@ -36,11 +36,8 @@ function recordEffect(action: string) {
 
 vi.mock("../components/CustomSnoozeDialog", () => ({ requestCustomSnooze: vi.fn() }));
 vi.mock("../components/board/useBoardEntry", () => ({
-  useBoardEntry: () => ({
-    state: { boardEnabled: false, canOpen: false, previewAvailable: false, hasThread: true },
-    visible: false,
-    open: async () => undefined,
-  }),
+  useBoardEntryState: () => ({ boardEnabled: false, canOpen: false }),
+  useOpenBoardPage: () => async () => undefined,
 }));
 vi.mock("react", () => ({
   useCallback: (callback: unknown) => callback,

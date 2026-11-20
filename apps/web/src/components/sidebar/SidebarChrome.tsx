@@ -47,8 +47,7 @@ import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { useBoardEntry } from "~/components/board/useBoardEntry";
-import { useThreadRouteRef } from "~/hooks/useThreadRouteTarget";
+import { useBoardEnvironments } from "~/components/board/useBoardEntry";
 import { observeResize } from "~/lib/observeResize";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
@@ -241,7 +240,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
-  const board = useBoardEntry(useThreadRouteRef());
+  const boardAvailable = useBoardEnvironments().length > 0;
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -307,13 +306,13 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               onClick={handleIssuesClick}
             />
           ) : null}
-          {board.visible ? (
+          {boardAvailable ? (
             <SidebarUtilityItem
               icon={<MessagesSquareIcon />}
               label={gt("Board", { $context: "sidebar button that opens rstack-board" })}
               onClick={() => {
                 closeMobileSidebar();
-                void board.open();
+                void navigate({ to: "/board" });
               }}
             />
           ) : null}

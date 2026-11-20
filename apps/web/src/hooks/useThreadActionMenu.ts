@@ -2,7 +2,7 @@ import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { openOnBoardVisible } from "../components/board/boardEntry.logic";
-import { useBoardEntry } from "../components/board/useBoardEntry";
+import { useBoardEntryState, useOpenBoardPage } from "../components/board/useBoardEntry";
 import { openGuestShareDialog } from "../components/chat/guestShareDialogState";
 import {
   type AtomCommandResult,
@@ -115,7 +115,8 @@ export function useThreadActionMenu(input: {
   const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{ threadId: ThreadId }>({
     onError: (error) => failureToast(m(msg("Failed to copy thread ID")), error),
   });
-  const board = useBoardEntry(threadRef);
+  const boardState = useBoardEntryState(threadRef?.environmentId ?? null);
+  const openBoardPage = useOpenBoardPage();
 
   const openMenu = (position: { x: number; y: number }) => {
     if (threadRef === null) return;
@@ -158,7 +159,7 @@ export function useThreadActionMenu(input: {
         canShareWithGuest,
         canTurnIntoProject: canTurnThreadIntoProject(threadRef),
         canOpenOnBoard: openOnBoardVisible({
-          ...board.state,
+          ...boardState,
           coordinator: thread.coordinator === true,
         }),
       });
@@ -281,7 +282,7 @@ export function useThreadActionMenu(input: {
           openGuestShareDialog(threadRef);
           return;
         case "open-on-board":
-          await board.open({ coordinatorView: true });
+          await openBoardPage(threadRef);
           return;
         case "turn-into-project": {
           const result = await turnThreadIntoProject(threadRef);
