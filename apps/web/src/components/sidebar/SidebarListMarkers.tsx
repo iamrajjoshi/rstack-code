@@ -1,6 +1,7 @@
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { SquarePenIcon } from "lucide-react";
 import { type ReactNode, useLayoutEffect } from "react";
 import { cn } from "~/lib/utils";
 import {
@@ -8,6 +9,8 @@ import {
   sidebarMarkerId,
   type SidebarListMarker,
 } from "../Sidebar.logic";
+import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SIDEBAR_SORTABLE_DRAG_DISABLED } from "./SidebarThreadRow";
 
 function SortableSidebarMarker(props: {
@@ -142,6 +145,67 @@ export function SidebarSectionHeader(props: {
       >
         {props.label}
       </CollapsibleSectionHeader>
+    </SortableSidebarMarker>
+  );
+}
+
+/** Splits the active list into coordinators and other threads; each group folds on its own. */
+export function SidebarGroupHeader(props: {
+  marker: "coordinators-header" | "threads-header";
+  label: string;
+  count: number;
+  toggle: { expanded: boolean; onToggle: () => void };
+  onNewThread?: () => void;
+  newThreadLabel?: string;
+}) {
+  const group = props.marker === "coordinators-header" ? "coordinators" : "threads";
+  const rowId = `group:${group}`;
+  return (
+    <SortableSidebarMarker
+      marker={props.marker}
+      data-testid={`sidebar-${props.marker}`}
+      className="group/sidebar-group relative mx-0.5 h-8"
+    >
+      <CollapsibleSectionHeader
+        data-sidebar-row={rowId}
+        onClick={props.toggle.onToggle}
+        expanded={props.toggle.expanded}
+        data-testid={`sidebar-${group}-group-toggle`}
+        accessory={
+          <span
+            className={cn(
+              "font-normal tabular-nums",
+              props.onNewThread &&
+                "group-hover/sidebar-group:invisible group-has-[[data-sidebar-action-for]:focus]/sidebar-group:invisible pointer-coarse:invisible",
+            )}
+          >
+            {props.count}
+          </span>
+        }
+      >
+        {props.label}
+      </CollapsibleSectionHeader>
+      {props.onNewThread ? (
+        // Sits over the count, which hides on hover or focus, and left of the chevron.
+        <span className="absolute inset-y-0 right-6 flex items-center opacity-0 focus-within:opacity-100 group-hover/sidebar-group:opacity-100 pointer-coarse:opacity-100">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  data-sidebar-action-for={rowId}
+                  size="icon-xs"
+                  variant="ghost-muted"
+                  aria-label={props.newThreadLabel}
+                  onClick={props.onNewThread}
+                />
+              }
+            >
+              <SquarePenIcon aria-hidden />
+            </TooltipTrigger>
+            <TooltipPopup>{props.newThreadLabel}</TooltipPopup>
+          </Tooltip>
+        </span>
+      ) : null}
     </SortableSidebarMarker>
   );
 }

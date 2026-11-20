@@ -1,4 +1,11 @@
 {
+  "d1da5201bc1224fe": "Koordinatoren",
+  "6b7d80fdccc5624b": "Neuer Koordinator",
+  "517e0bee75df8668": "Threads",
+  "c0aa7fb62ec13563": "Koordinatoren gruppieren",
+  "b993c9453ebadc25": "Koordinator-Gruppierung auf Standard zurücksetzen",
+  "2bd5cf4886d6c11a": "Koordinator-Threads in einer eigenen Gruppe über deinen anderen Threads anzeigen. Die Gruppen erscheinen nur, solange ein Koordinator in der Liste ist.",
+  "b219d7b5db0c4433": "koordinator worker seitenleiste gruppe threads abschnitt",
   "23be753133ae6950": "Thread",
   "0001ae5846061bb6": "Thread auf {machine}",
   "eef7f4dacbc3c3f2": "Rechner",

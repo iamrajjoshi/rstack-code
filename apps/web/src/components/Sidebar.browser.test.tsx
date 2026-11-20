@@ -303,6 +303,62 @@ describe("sidebar thread menu", () => {
   });
 });
 
+describe("sidebar coordinator groups", () => {
+  it("groups coordinators above threads only while one is listed and the option is on", async () => {
+    using stack = new DisposableStack();
+    const previousSettings = getClientSettings();
+    stack.defer(() => __setClientSettingsForTests(previousSettings));
+    __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+    const activeProject = project("active");
+    const first = threadShell(activeProject.id, 0);
+    const second = threadShell(activeProject.id, 1);
+    const threadRef = { environmentId: activeProject.environmentId, threadId: first.id };
+    vi.mocked(useProjects).mockReturnValue([activeProject]);
+    vi.mocked(useQuietThreadShells).mockReturnValue([first, second]);
+    vi.mocked(useThreadRouteTarget).mockReturnValue({ kind: "server", threadRef });
+    vi.mocked(useHandleNewThread).mockReturnValue({
+      activeDraftThread: null,
+      activeThread: null,
+      defaultProjectRef: {
+        environmentId: activeProject.environmentId,
+        projectId: activeProject.id,
+      },
+      defaultProjectFallbackReady: true,
+      handleNewThread: vi.fn().mockResolvedValue(null),
+      routeDraftId: null,
+      routeThreadRef: threadRef,
+    });
+    const tree = () => (
+      <SidebarProvider>
+        <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
+      </SidebarProvider>
+    );
+    const rowOrder = () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[data-sidebar-row]"), (row) => {
+        const id = row.dataset.sidebarRow ?? "";
+        return id.endsWith(first.id) ? "first" : id.endsWith(second.id) ? "second" : id;
+      }).filter((id) => id === "first" || id === "second" || id.startsWith("group:"));
+    await using screen = await render(tree());
+    await expect.element(screen.getByText("Thread 1").first()).toBeInTheDocument();
+    expect(rowOrder()).not.toContain("group:coordinators");
+
+    // Turning the role on moves the row into the Coordinators group, above the rest.
+    vi.mocked(useQuietThreadShells).mockReturnValue([first, { ...second, coordinator: true }]);
+    await screen.rerender(tree());
+    await expect.element(screen.getByTestId("sidebar-coordinators-group-toggle")).toBeVisible();
+    expect(rowOrder()).toEqual(["group:coordinators", "second", "group:threads", "first"]);
+
+    __setClientSettingsForTests({
+      ...DEFAULT_CLIENT_SETTINGS,
+      sidebarCoordinatorGroupsEnabled: false,
+    });
+    await screen.rerender(tree());
+    await expect
+      .element(screen.getByTestId("sidebar-coordinators-group-toggle"))
+      .not.toBeInTheDocument();
+  });
+});
+
 describe("sidebar settled pagination", () => {
   it("keeps the viewport in place when showing more settled threads", async () => {
     using stack = new DisposableStack();

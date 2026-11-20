@@ -1,4 +1,11 @@
 {
+  "d1da5201bc1224fe": "Coordinateurs",
+  "6b7d80fdccc5624b": "Nouveau coordinateur",
+  "517e0bee75df8668": "Fils",
+  "c0aa7fb62ec13563": "Regrouper les coordinateurs",
+  "b993c9453ebadc25": "Réinitialiser le regroupement des coordinateurs",
+  "2bd5cf4886d6c11a": "Affiche les fils coordinateurs dans leur propre groupe, au-dessus de vos autres fils. Les groupes n’apparaissent que si un coordinateur figure dans la liste.",
+  "b219d7b5db0c4433": "coordinateur workers barre latérale groupe fils section",
   "23be753133ae6950": "Fil",
   "0001ae5846061bb6": "Fil sur {machine}",
   "eef7f4dacbc3c3f2": "Machine",

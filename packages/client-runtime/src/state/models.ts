@@ -207,6 +207,8 @@ export interface EnvironmentThreadShell {
   /** Server-tracked open history for search ranking. */
   readonly opens?: import("@t3tools/contracts").OrchestrationV2ThreadOpens | null;
   readonly titleRegeneration?: { readonly requestId: string; readonly startedAt: string } | null;
+  /** The thread delegates implementation to worker threads. */
+  readonly coordinator?: boolean;
   readonly deletedAt: string | null;
   readonly source: OrchestrationV2ThreadShell;
 }
@@ -362,6 +364,7 @@ export function presentThreadShell(
             requestId: thread.titleRegeneration.requestId,
             startedAt: iso(thread.titleRegeneration.startedAt),
           },
+    ...(thread.coordinator === true ? { coordinator: true } : {}),
     deletedAt: nullableIso(thread.deletedAt),
     source: thread,
   };

@@ -6959,6 +6959,66 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
     }),
   );
 
+  it.effect("puts the coordinator role on SQL and memory shells only when set", () =>
+    Effect.gen(function* () {
+      const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+      const now = yield* DateTime.now;
+      const createThread = (id: string, coordinator: boolean) => {
+        const threadId = ThreadId.make(id);
+        return Effect.as(
+          projectionStore.apply({
+            id: EventId.make(`event:${id}:created`),
+            type: "thread.created",
+            threadId,
+            occurredAt: now,
+            payload: {
+              createdBy: "user",
+              creationSource: "web",
+              id: threadId,
+              projectId: ProjectId.make("project:coordinator-shell"),
+              title: id,
+              providerInstanceId,
+              modelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              activeProviderThreadId: null,
+              lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+              forkedFrom: null,
+              ...(coordinator ? { coordinator: true } : {}),
+              createdAt: now,
+              updatedAt: now,
+              archivedAt: null,
+              settledOverride: null,
+              settledAt: null,
+              lastVisitedAt: null,
+              deletedAt: null,
+            },
+          }),
+          threadId,
+        );
+      };
+      const coordinatorId = yield* createThread("thread:coordinator-shell", true);
+      const regularId = yield* createThread("thread:regular-shell", false);
+      const snapshot = yield* projectionStore.getShellSnapshot();
+      for (const [threadId, expected] of [
+        [coordinatorId, true],
+        [regularId, undefined],
+      ] as const) {
+        const memoryShell = ProjectionStore.threadShellFromProjection(
+          yield* projectionStore.getThreadProjection(threadId),
+        );
+        const sqlShell = snapshot.threads.find((thread) => thread.id === threadId)!;
+        for (const shell of [memoryShell, sqlShell]) {
+          assert.strictEqual(shell.coordinator, expected);
+          // Regular threads send no key, so the shell stream carries no extra bytes for them.
+          assert.strictEqual("coordinator" in shell, expected === true);
+        }
+      }
+    }),
+  );
+
   // regression: #17141 shell snapshot decoding blocked other database reads
   it.effect("reads the shell snapshot first and decodes it in a separate step", () =>
     Effect.gen(function* () {

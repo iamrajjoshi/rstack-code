@@ -1,4 +1,11 @@
 {
+  "d1da5201bc1224fe": "Coordenadores",
+  "6b7d80fdccc5624b": "Novo coordenador",
+  "517e0bee75df8668": "Threads",
+  "c0aa7fb62ec13563": "Agrupar coordenadores",
+  "b993c9453ebadc25": "Redefinir agrupamento de coordenadores",
+  "2bd5cf4886d6c11a": "Lista as threads coordenadoras em um grupo próprio, acima das suas outras threads. Os grupos só aparecem enquanto houver um coordenador na lista.",
+  "b219d7b5db0c4433": "coordenador workers barra lateral grupo threads seção",
   "23be753133ae6950": "Thread",
   "0001ae5846061bb6": "Thread em {machine}",
   "eef7f4dacbc3c3f2": "Máquina",

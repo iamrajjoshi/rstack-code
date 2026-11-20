@@ -530,6 +530,35 @@ describe("sidebar drag projection", () => {
     expect(byTime.get("w")).toEqual(stationary);
   });
 
+  it("keeps a dragged thread inside its coordinator group and both group headers in place", () => {
+    const items = [
+      pinnedHeader,
+      divider,
+      marker("active-placeholder"),
+      marker("coordinators-header"),
+      thread("c1", "active"),
+      marker("threads-header"),
+      thread("r1", "active"),
+      thread("r2", "active"),
+      settledHeader,
+      marker("settled-placeholder"),
+    ];
+    const input = {
+      items,
+      settledOrder: [],
+      settledExpanded: false,
+      coordinatorKeys: new Set(["c1"]),
+    };
+    const result = preview(input, "r2", "c1");
+    // Everything shifts alike by the fixture's 1px gap after the dropped placeholder.
+    const shift = result.get(sidebarMarkerId("coordinators-header"))?.y;
+    expect(result.get(sidebarMarkerId("coordinators-header"))?.scaleY).toBe(1);
+    expect(result.get("c1")?.y).toBe(shift);
+    expect(result.get(sidebarMarkerId("threads-header"))).toEqual({ ...stationary, y: shift });
+    // r2 previews first among threads, above r1.
+    expect(result.get("r1")?.y).toBe(shift! + 83);
+  });
+
   it("updates the projection when the target or measured geometry changes", () => {
     const strategy = createSidebarSortingStrategy({
       items: pinned,

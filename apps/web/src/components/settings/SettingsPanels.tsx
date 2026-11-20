@@ -538,6 +538,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarWorkingShelfEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
       ? [gt("Working section")]
       : []),
+    ...(settings.sidebarCoordinatorGroupsEnabled !==
+    DEFAULT_UNIFIED_SETTINGS.sidebarCoordinatorGroupsEnabled
+      ? [gt("Group coordinators")]
+      : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? [gt("Auto-settle inactive threads")]
       : []),
@@ -725,6 +729,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      sidebarCoordinatorGroupsEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarCoordinatorGroupsEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -968,6 +973,38 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
               aria-label={gt("Working section")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("coordinator-groups")}
+          description={
+            <T>
+              List coordinator threads in their own group above your other threads. The groups
+              appear only while a coordinator is in the list.
+            </T>
+          }
+          resetAction={
+            settings.sidebarCoordinatorGroupsEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarCoordinatorGroupsEnabled ? (
+              <SettingResetButton
+                ariaLabel={gt("Reset coordinator grouping to default")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarCoordinatorGroupsEnabled:
+                      DEFAULT_UNIFIED_SETTINGS.sidebarCoordinatorGroupsEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarCoordinatorGroupsEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarCoordinatorGroupsEnabled: Boolean(checked) })
+              }
+              aria-label={gt("Group coordinators")}
             />
           }
         />

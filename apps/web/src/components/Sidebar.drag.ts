@@ -98,6 +98,8 @@ export function createSidebarSortingStrategy(input: {
   settledVisibleCount?: number;
   routeThreadKey?: string | null;
   snoozedThreadCount?: number;
+  /** Set while coordinator groups show: the coordinator rows lead the active section. */
+  coordinatorKeys?: ReadonlySet<string> | null;
   cardHeight?: number;
   slimHeight?: number;
   boundaryLabelHeight?: number;
@@ -168,7 +170,16 @@ export function createSidebarSortingStrategy(input: {
     groups.settled = visible.map((key) => ({ kind: "thread", key, section: "settled" }));
     const projected: SidebarListItem[] = [];
     const marker = (name: SidebarListMarker) => projected.push({ kind: "marker", marker: name });
+    const coordinatorKeys = input.coordinatorKeys;
     const section = (name: "active" | "settled") => {
+      if (name === "active" && coordinatorKeys) {
+        if (groups.active.length === 0) marker("active-placeholder");
+        marker("coordinators-header");
+        projected.push(...groups.active.filter((item) => coordinatorKeys.has(item.key)));
+        marker("threads-header");
+        projected.push(...groups.active.filter((item) => !coordinatorKeys.has(item.key)));
+        return;
+      }
       if (groups[name].length > 0) projected.push(...groups[name]);
       else marker(`${name}-placeholder`);
     };

@@ -2326,6 +2326,8 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
     ),
   ),
   lastTitleRegeneration: Schema.optional(Schema.NullOr(OrchestrationV2LastTitleRegeneration)),
+  /** Sent only when true, so regular threads cost no shell bytes. */
+  coordinator: Schema.optional(Schema.Boolean),
   deletedAt: Schema.NullOr(Schema.DateTimeUtc),
 });
 export type OrchestrationV2ThreadShell = typeof OrchestrationV2ThreadShell.Type;

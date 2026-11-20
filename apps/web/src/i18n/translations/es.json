@@ -1,4 +1,11 @@
 {
+  "d1da5201bc1224fe": "Coordinadores",
+  "6b7d80fdccc5624b": "Nuevo coordinador",
+  "517e0bee75df8668": "Hilos",
+  "c0aa7fb62ec13563": "Agrupar coordinadores",
+  "b993c9453ebadc25": "Restablecer la agrupación de coordinadores",
+  "2bd5cf4886d6c11a": "Muestra los hilos coordinadores en su propio grupo encima de tus otros hilos. Los grupos solo aparecen mientras haya un coordinador en la lista.",
+  "b219d7b5db0c4433": "coordinador trabajadores barra lateral grupo hilos sección",
   "23be753133ae6950": "Hilo",
   "0001ae5846061bb6": "Hilo en {machine}",
   "eef7f4dacbc3c3f2": "Máquina",

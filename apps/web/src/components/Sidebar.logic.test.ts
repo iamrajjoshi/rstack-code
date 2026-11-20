@@ -34,8 +34,11 @@ import {
   type SidebarSection,
   resolveSidebarDropVerb,
   groupSidebarThreadsByProject,
+  mergeSidebarGroupDropOrder,
   resolveSidebarFolderDot,
+  scopeSidebarActiveDropToGroup,
   sidebarFolderExpansionKeys,
+  splitSidebarCoordinatorThreads,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -1702,5 +1705,73 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
     expect(shouldCreateNewThreadInCurrentProject(false, 1, 3)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(false, 0, 0)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 2, 2)).toBe(true);
+  });
+});
+
+describe("coordinator groups", () => {
+  const coordinatorKeys = new Set(["c1", "c2"]);
+  const activeKeysById = new Map([
+    ["c1", "b"],
+    ["r1", "c"],
+    ["c2", "d"],
+    ["r2", "e"],
+  ]);
+
+  it("splits the active list into coordinators and other threads, keeping each order", () => {
+    const split = splitSidebarCoordinatorThreads([
+      { id: "r1" },
+      { id: "c1", coordinator: true },
+      { id: "r2", coordinator: false },
+      { id: "c2", coordinator: true },
+    ]);
+    expect(split.coordinators.map((thread) => thread.id)).toEqual(["c1", "c2"]);
+    expect(split.others.map((thread) => thread.id)).toEqual(["r1", "r2"]);
+  });
+
+  it("orders a drop among its own group, so only the moved thread gets a key", () => {
+    const groupedOrder = ["c1", "c2", "r1", "r2"];
+    const { target, activeOrder } = scopeSidebarActiveDropToGroup({
+      // r2 dropped into the coordinator group lands first among the other threads.
+      target: { section: "active", pinnedOrder: [], activeOrder: ["c1", "r2", "c2", "r1"] },
+      activeOrder: groupedOrder,
+      activeKey: "r2",
+      coordinatorKeys,
+    });
+    expect(target.activeOrder).toEqual(["r2", "r1"]);
+    const plan = planSidebarThreadDrop({
+      activeKey: "r2",
+      activeSection: "active",
+      target,
+      pinnedOrder: [],
+      pinnedKeysById: new Map(),
+      activeOrder,
+      activeKeysById,
+    });
+    expect(plan.kind).toBe("move-active");
+    if (plan.kind !== "move-active" || plan.order === null) return;
+    // Interleaved keys across groups would otherwise respread every active thread's key.
+    expect(plan.assignments).toHaveLength(1);
+    expect(plan.assignments[0]!.id).toBe("r2");
+    expect(plan.assignments[0]!.orderKey < "c").toBe(true);
+    expect(
+      mergeSidebarGroupDropOrder({
+        groupOrder: plan.order,
+        activeOrder: groupedOrder,
+        activeKey: "r2",
+        coordinatorKeys,
+      }),
+    ).toEqual(["c1", "c2", "r2", "r1"]);
+  });
+
+  it("leaves drops untouched while the groups are off", () => {
+    const target = { section: "active" as const, pinnedOrder: [], activeOrder: ["r2", "c1"] };
+    expect(
+      scopeSidebarActiveDropToGroup({
+        target,
+        activeOrder: ["c1", "r2"],
+        activeKey: "r2",
+        coordinatorKeys: null,
+      }),
+    ).toEqual({ target, activeOrder: ["c1", "r2"] });
   });
 });

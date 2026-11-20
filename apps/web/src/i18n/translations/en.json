@@ -1,4 +1,11 @@
 {
+  "d1da5201bc1224fe": "Coordinators",
+  "6b7d80fdccc5624b": "New coordinator",
+  "517e0bee75df8668": "Threads",
+  "c0aa7fb62ec13563": "Group coordinators",
+  "b993c9453ebadc25": "Reset coordinator grouping to default",
+  "2bd5cf4886d6c11a": "List coordinator threads in their own group above your other threads. The groups appear only while a coordinator is in the list.",
+  "b219d7b5db0c4433": "coordinator workers sidebar group threads section",
   "23be753133ae6950": "Thread",
   "0001ae5846061bb6": "Thread on {machine}",
   "eef7f4dacbc3c3f2": "Machine",

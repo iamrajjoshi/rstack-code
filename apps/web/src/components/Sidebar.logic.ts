@@ -213,7 +213,9 @@ export type SidebarListMarker =
   | "pinned-divider"
   | "working-header"
   | "snoozed-header"
-  | "settled-header";
+  | "settled-header"
+  | "coordinators-header"
+  | "threads-header";
 
 export function sidebarMarkerId(marker: SidebarListMarker): string {
   return `${SIDEBAR_MARKER_PREFIX}${marker}`;
@@ -238,6 +240,52 @@ function sectionAtSidebarSlot(items: readonly SidebarListItem[], index: number):
     else if (item.marker === "settled-header") section = "settled";
   }
   return section;
+}
+
+/**
+ * Splits the active list into coordinators and other threads, each keeping its order. Worker
+ * threads never reach the active list; they nest under their parent.
+ */
+export function splitSidebarCoordinatorThreads<T extends { readonly coordinator?: boolean }>(
+  threads: readonly T[],
+): { readonly coordinators: T[]; readonly others: T[] } {
+  const coordinators: T[] = [];
+  const others: T[] = [];
+  for (const thread of threads) (thread.coordinator === true ? coordinators : others).push(thread);
+  return { coordinators, others };
+}
+
+/**
+ * With coordinator groups shown, an active drop reorders the thread only among its own group, so
+ * its order key lands between same-group neighbours and the other group keeps its keys.
+ */
+export function scopeSidebarActiveDropToGroup(input: {
+  readonly target: SidebarDropTarget;
+  readonly activeOrder: readonly string[];
+  readonly activeKey: string;
+  readonly coordinatorKeys: ReadonlySet<string> | null;
+}): { readonly target: SidebarDropTarget; readonly activeOrder: readonly string[] } {
+  const { target, activeOrder, activeKey, coordinatorKeys } = input;
+  if (coordinatorKeys === null || target.section !== "active") return { target, activeOrder };
+  const inGroup = (key: string) => coordinatorKeys.has(key) === coordinatorKeys.has(activeKey);
+  return {
+    target: { ...target, activeOrder: target.activeOrder.filter(inGroup) },
+    activeOrder: activeOrder.filter(inGroup),
+  };
+}
+
+/** The whole active list after a group-scoped drop: coordinators first, then the rest. */
+export function mergeSidebarGroupDropOrder(input: {
+  readonly groupOrder: readonly string[];
+  readonly activeOrder: readonly string[];
+  readonly activeKey: string;
+  readonly coordinatorKeys: ReadonlySet<string> | null;
+}): readonly string[] {
+  const { groupOrder, activeOrder, activeKey, coordinatorKeys } = input;
+  if (coordinatorKeys === null) return groupOrder;
+  const isCoordinator = coordinatorKeys.has(activeKey);
+  const others = activeOrder.filter((key) => coordinatorKeys.has(key) !== isCoordinator);
+  return isCoordinator ? [...groupOrder, ...others] : [...others, ...groupOrder];
 }
 
 type SidebarDropTarget = {

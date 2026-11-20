@@ -49,6 +49,7 @@ import {
   ClockIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
+  NetworkIcon,
   PinIcon,
   PinOffIcon,
   ShieldQuestionIcon,
@@ -162,6 +163,18 @@ function RelativeTimeLabel(props: { timestamp: string | null }) {
   return props.timestamp === null
     ? null
     : compactSidebarTimeLabel(props.timestamp, Date.parse(`${nowMinute}:00.000Z`), m);
+}
+
+/** The composer's coordinator icon, so a coordinator row reads as one at a glance. */
+function CoordinatorMarker() {
+  const gt = useGT();
+  return (
+    <NetworkIcon
+      role="img"
+      aria-label={gt("Coordinator")}
+      className="size-3 shrink-0 text-muted-foreground/65"
+    />
+  );
 }
 
 function JumpHintBadge(props: { label: string }) {
@@ -1395,6 +1408,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 </span>
               )}
               {draftIndicator}
+              {thread.coordinator ? <CoordinatorMarker /> : null}
               {title}
               {multiline ? titleLineIcons : null}
               {pinIndicator}
@@ -1743,6 +1757,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               {props.sweepAction !== null ? dragDestination : null}
             </div>
             <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              {thread.coordinator ? <CoordinatorMarker /> : null}
               {title}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
@@ -1936,6 +1951,7 @@ export const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props
           ) : null}
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2.5">
+              {thread.coordinator ? <CoordinatorMarker /> : null}
               <span
                 ref={isRegeneratingTitle ? observeVisibleAnimation : undefined}
                 className={cn(

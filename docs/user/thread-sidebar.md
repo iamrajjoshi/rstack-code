@@ -160,6 +160,18 @@ Pinned threads stay above the folders, and Snoozed and Settled stay below them. 
 can drag a thread onto the composer to mention it, but not within the sidebar, and the Working
 section is off. Each device keeps its own choice.
 
+### Coordinators and threads
+
+On web and desktop, a [coordinator thread](./composer.md#coordinator-threads) shows the
+coordinator icon on its row. While at least one coordinator is in the active list, the list
+splits into **Coordinators** above **Threads**, each in its usual order. Click a group's header
+to fold it; the sidebar remembers each group's state. Use the pen button on **Coordinators** to
+start a draft that is already a coordinator. Turning the role on or off moves the thread between
+the groups. Drag reorders a thread within its own group. Pinned, Working, Snoozed, and Settled
+keep their places and hold both kinds. Worker threads stay nested under their coordinator. With
+the project-grouped sidebar, coordinators come first in each folder instead. Turn the groups off
+with **Settings → General → Group coordinators**. Each device keeps its own choice.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list
