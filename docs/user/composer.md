@@ -333,18 +333,18 @@ its progress.
 ## Coordinator threads
 
 The network button next to the model picker makes a thread, or the new thread
-you are drafting, a coordinator. With Claude and Codex, a coordinator plans and
-hands implementation to worker agents, each in its own worktree, then reports
-each worker's branch and what it did not verify. Workers are plain threads, not
+you are drafting, a coordinator. With Claude, Codex and OpenCode, a coordinator
+plans and hands implementation to worker agents, each in its own worktree, then
+reports each worker's branch and what it did not verify. Workers are plain threads, not
 coordinators, unless the coordinator asks for one. A change applies from the next
 message; Claude restarts its session to pick it up.
 
 Workers default to Claude Opus 5.5 at medium effort in a new worktree, at most 6
 running at once, unless you name another model. Change these, and add standing
-instructions every worker receives (such as branch naming), with the
-`coordinatorWorkerModelSelection`, `coordinatorWorkerIsolation`,
-`coordinatorMaxParallelWorkers` and `coordinatorStandingInstructions` keys in
-the server's `settings.json`.
+instructions every worker receives (such as branch naming), in **Settings →
+Threads → Coordinator**. A project without git gives workers the coordinator's
+checkout instead of a worktree. A worker on a linked environment gets the same
+model, limit and instructions, and works in that project's checkout.
 
 ## Context in your message
 

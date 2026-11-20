@@ -100,7 +100,7 @@ const DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS: SidebarAutoSettleAfterDays = 7;
 
 export const CoordinatorWorkerIsolation = Schema.Literals(["worktree", "shared"]);
 export type CoordinatorWorkerIsolation = typeof CoordinatorWorkerIsolation.Type;
-const MAX_COORDINATOR_PARALLEL_WORKERS = 20;
+export const MAX_COORDINATOR_PARALLEL_WORKERS = 20;
 export const CoordinatorMaxParallelWorkers = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: MAX_COORDINATOR_PARALLEL_WORKERS }),
 );

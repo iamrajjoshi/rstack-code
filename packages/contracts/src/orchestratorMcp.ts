@@ -256,6 +256,17 @@ export const OrchestratorMcpDelegateTaskResult = Schema.Struct({
   ).annotate({
     description: "Oldest pending approval, or null. Ends a wait. Grants no approval rights.",
   }),
+  workspace: Schema.optional(
+    Schema.Struct({
+      isolation: Schema.Literals(["worktree", "shared"]),
+      worktreePath: Schema.optional(Schema.String),
+      branch: Schema.optional(Schema.String),
+      note: Schema.optional(Schema.String),
+    }),
+  ).annotate({
+    description:
+      "Where the child works. A new worktree's path and branch appear once it is created.",
+  }),
   waitTimedOut: Schema.Boolean.annotate({
     description: "True only on the timed-out wait call. The child keeps running.",
   }),

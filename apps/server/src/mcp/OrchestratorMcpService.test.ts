@@ -11,6 +11,7 @@ import {
   NodeId,
   ORCHESTRATOR_MCP_RUNNING_TASK_NEXT,
   type OrchestratorMcpCapabilitiesResult,
+  OrchestratorMcpFailure,
   type OrchestratorMcpListScheduledTasksInput,
   type Project,
   OrchestratorMcpTarget,
@@ -443,7 +444,13 @@ describe("OrchestratorMcpService", () => {
       let providerStarted = false;
       const childProjection = () =>
         ({
-          thread: { id: childThreadId, title: "Child task" },
+          thread: {
+            id: childThreadId,
+            title: "Child task",
+            // Launch creates the worktree before the provider starts.
+            worktreePath: providerStarted ? "/repo/.t3/worktrees/child" : null,
+            branch: providerStarted ? "t3/child-task" : null,
+          },
           runs: [
             {
               id: childRunId,
@@ -451,6 +458,7 @@ describe("OrchestratorMcpService", () => {
               status: providerStarted ? "running" : "starting",
               startedAt: providerStarted ? DateTime.makeUnsafe("2026-10-24T10:00:00Z") : null,
               delegatedTaskId: taskId,
+              workspacePreparation: { type: "worktree", baseRef: "abc123" },
             },
           ],
           contextTransfers: [],
@@ -497,10 +505,16 @@ describe("OrchestratorMcpService", () => {
         assert.equal(waiting.status, "starting");
         assert.equal(waiting.workState, "working");
         assert.equal(waiting.childRunId, childRunId);
+        assert.deepEqual(waiting.workspace, { isolation: "worktree" });
         providerStarted = true;
         const started = yield* service.taskStatus(scope, taskId);
         assert.equal(started.status, "running");
         assert.equal(started.workState, "working");
+        assert.deepEqual(started.workspace, {
+          isolation: "worktree",
+          worktreePath: "/repo/.t3/worktrees/child",
+          branch: "t3/child-task",
+        });
       }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
     }),
   );
@@ -2700,43 +2714,42 @@ describe("OrchestratorMcpService provider resolution", () => {
 
   describe("from a coordinator thread", () => {
     const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
-    const runningChildId = ThreadId.make("thread:mcp-coordinator-running");
-    const idleChildId = ThreadId.make("thread:mcp-coordinator-idle");
-    const coordinatorProjection = (coordinator: boolean) => {
-      const projection = parentProjection([]);
-      return {
-        ...projection,
-        thread: { ...projection.thread, ...(coordinator ? { coordinator: true } : {}) },
-      } as OrchestrationV2ThreadProjection;
-    };
+    const workerTask = (index: number, status: string) => ({
+      id: NodeId.make(`node:mcp-coordinator-worker-${index}`),
+      threadId: parentThreadId,
+      origin: "app_owned",
+      status,
+    });
     const delegate = (input: {
       readonly coordinator: boolean;
       readonly runningChildren: number;
       readonly request: Partial<
         Parameters<OrchestratorMcpService.OrchestratorMcpServiceShape["delegateTask"]>[1]
       >;
+      readonly isolation?: "worktree" | "shared";
+      readonly resolveCommit?: GitVcsDriver.GitVcsDriver["Service"]["resolveCommit"];
     }) =>
       Effect.gen(function* () {
         const commands: Array<Record<string, unknown>> = [];
-        const children = [
+        const subagents: Array<unknown> = [
           ...Array.from({ length: input.runningChildren }, (_, index) =>
-            ThreadId.make(`${runningChildId}-${index}`),
+            workerTask(index, "running"),
           ),
-          idleChildId,
+          workerTask(-1, "completed"),
         ];
+        const projection = () => {
+          const base = parentProjection(subagents);
+          return {
+            ...base,
+            thread: { ...base.thread, ...(input.coordinator ? { coordinator: true } : {}) },
+          } as OrchestrationV2ThreadProjection;
+        };
         const layerDependencies = Layer.mergeAll(
           NodeServices.layer,
           NodeCrypto.layer,
           Layer.mock(ThreadManagementService.ThreadManagementService)({
             hasReceipt: () => Effect.succeed(false),
-            getThreadRecords: () => Effect.succeed(coordinatorProjection(input.coordinator)),
-            listAppOwnedChildThreadIds: () => Effect.succeed(children),
-            getThreadShell: (threadId) =>
-              Effect.succeed({
-                id: threadId,
-                deletedAt: null,
-                status: threadId === idleChildId ? "completed" : "running",
-              } as never),
+            getThreadRecords: () => Effect.sync(projection),
             dispatch: (command) =>
               Effect.sync(() => commands.push(command as never)).pipe(
                 Effect.andThen(
@@ -2751,7 +2764,7 @@ describe("OrchestratorMcpService provider resolution", () => {
               ),
           }),
           ServerSettings.layerTest({
-            coordinatorWorkerIsolation: "shared",
+            coordinatorWorkerIsolation: input.isolation ?? "shared",
             coordinatorMaxParallelWorkers: 2,
             coordinatorStandingInstructions: "Name branches raj--<area>--<topic>.",
           }),
@@ -2789,10 +2802,34 @@ describe("OrchestratorMcpService provider resolution", () => {
             },
           ]),
           adapterRegistryLayer([codexInstanceId, claudeInstanceId]),
-          Layer.mock(ProjectService.ProjectService)({ getById: () => Effect.succeedNone }),
+          Layer.mock(ProjectService.ProjectService)({
+            getById: () =>
+              Effect.succeedSome({ id: projectId, title: "Repo", workspaceRoot: "/repo" } as never),
+          }),
           Layer.mock(SecretRequests.SecretRequests)({}),
-          Layer.mock(RemoteDelegation.RemoteDelegation)({}),
+          Layer.mock(RemoteDelegation.RemoteDelegation)({
+            delegate: (_scope, request) =>
+              Effect.sync(() => commands.push(request as never)).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new OrchestratorMcpFailure({
+                      code: "orchestration_error",
+                      message: "captured",
+                    }),
+                  ),
+                ),
+              ),
+          }),
           Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+        );
+        const layerService = OrchestratorMcpService.layer.pipe(
+          Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
+          Layer.provide(
+            Layer.mock(GitVcsDriver.GitVcsDriver)(
+              input.resolveCommit === undefined ? {} : { resolveCommit: input.resolveCommit },
+            ),
+          ),
+          Layer.provide(layerDependencies),
         );
         const error = yield* Effect.gen(function* () {
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
@@ -2804,7 +2841,7 @@ describe("OrchestratorMcpService provider resolution", () => {
               ...input.request,
             })
             .pipe(Effect.flip);
-        }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
+        }).pipe(Effect.provide(layerService));
         return { error, command: commands[0] };
       });
 
@@ -2855,6 +2892,65 @@ describe("OrchestratorMcpService provider resolution", () => {
         assert.include(error.message, "already has 2 running workers, its limit of 2");
         assert.isUndefined(command);
       }),
+    );
+
+    it.effect("gives a linked environment's task the worker model and limit, not a worktree", () =>
+      Effect.gen(function* () {
+        const environmentId = EnvironmentId.make("environment:mcp-coordinator-box");
+        const { command } = yield* delegate({
+          coordinator: true,
+          runningChildren: 1,
+          isolation: "worktree",
+          request: { target: { environmentId } },
+        });
+        assert.deepEqual(command?.target, {
+          environmentId,
+          providerInstanceId: claudeInstanceId,
+          model: "claude-opus-5-5",
+          options: [{ id: "effort", value: "medium" }],
+        });
+        assert.isUndefined(command?.isolation);
+        assert.include(command?.task, "Standing instructions from the user:");
+        const full = yield* delegate({
+          coordinator: true,
+          runningChildren: 2,
+          request: { target: { environmentId } },
+        });
+        assert.equal(full.error.code, "invalid_request");
+        assert.isUndefined(full.command);
+      }),
+    );
+
+    it.effect.each([
+      { name: "the default worktree", request: {}, dispatched: true },
+      { name: "an asked-for worktree", request: { isolation: "worktree" }, dispatched: false },
+    ] as const)(
+      "$name without a git commit falls back only when defaulted",
+      ({ request, dispatched }) =>
+        Effect.gen(function* () {
+          const { error, command } = yield* delegate({
+            coordinator: true,
+            runningChildren: 0,
+            isolation: "worktree",
+            resolveCommit: () =>
+              Effect.fail(
+                new GitCommandError({
+                  operation: "GitVcsDriver.test",
+                  command: "git",
+                  cwd: "/repo",
+                  detail: "not a git repository",
+                }),
+              ),
+            request,
+          });
+          if (dispatched) {
+            assert.isDefined(command);
+            assert.isUndefined(command?.workspaceStrategy);
+          } else {
+            assert.isUndefined(command);
+            assert.equal(error.code, "invalid_request");
+          }
+        }),
     );
 
     it.effect("leaves a plain thread's delegation alone and refuses it a sub-coordinator", () =>

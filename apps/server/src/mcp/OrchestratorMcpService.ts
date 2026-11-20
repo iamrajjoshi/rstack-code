@@ -89,6 +89,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import {
   subagentResultForRun,
@@ -560,6 +561,20 @@ function hasPendingChildRuns(
       !(run.status === "queued" && run.queueHeld === true) &&
       (delegatedRun === undefined || run.ordinal > delegatedRun.ordinal),
   );
+}
+
+/** A shared child keeps the parent's checkout; a worktree child gets its own once launch creates it. */
+function delegatedTaskWorkspace(
+  childProjection: Pick<OrchestrationV2ThreadProjection, "thread" | "runs">,
+): NonNullable<OrchestratorMcpDelegateTaskResult["workspace"]> {
+  const { worktreePath, branch } = childProjection.thread;
+  return {
+    isolation: childProjection.runs.some((run) => run.workspacePreparation?.type === "worktree")
+      ? "worktree"
+      : "shared",
+    ...(worktreePath === null ? {} : { worktreePath }),
+    ...(branch === null ? {} : { branch }),
+  };
 }
 
 function isTerminalTaskStatus(
@@ -1292,6 +1307,8 @@ const make = Effect.gen(function* () {
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const remoteDelegation = yield* RemoteDelegation.RemoteDelegation;
+  // Two delegations landing together must not both pass a coordinator's worker limit.
+  const coordinatorDelegations = yield* KeyedLock.make<ThreadId>();
 
   const requireProject = (projectId: ProjectId) =>
     projects.getById(projectId).pipe(
@@ -1940,6 +1957,7 @@ const make = Effect.gen(function* () {
         isTerminalTaskStatus(status) || task.completionDelivery?.state === "disposed"
           ? null
           : pendingTaskApproval(childControls, task.id, childRun),
+      workspace: delegatedTaskWorkspace(childControls),
       waitTimedOut,
     } satisfies OrchestratorMcpDelegateTaskResult;
     const response: OrchestratorMcpDelegateTaskResult =
@@ -2750,22 +2768,6 @@ const make = Effect.gen(function* () {
       };
     }),
     delegateTask: Effect.fn("OrchestratorMcpService.delegateTask")(function* (callerScope, input) {
-      const environmentId =
-        input.target === undefined
-          ? undefined
-          : PeerForwarding.remoteTarget(callerScope, input.target.environmentId);
-      if (input.target !== undefined && environmentId !== undefined) {
-        yield* requireCapability(callerScope);
-        const scope = yield* requireThreadScope(callerScope, "delegate_task");
-        // The task's child runs as an ordinary thread there; this thread keeps the task.
-        const { taskId } = yield* remoteDelegation.delegate(scope, {
-          ...input,
-          target: { ...input.target, environmentId },
-        });
-        return yield* input.mode === "wait"
-          ? awaitTask(scope, taskId, taskId, input.timeoutMs)
-          : readTask(scope, taskId, false, true);
-      }
       const { scope, parent } = yield* loadThreadCaller(callerScope, "delegate_task");
       const coordinatorSettings =
         parent.thread.coordinator === true
@@ -2781,12 +2783,61 @@ const make = Effect.gen(function* () {
           "Only a coordinator thread can start a sub-coordinator. Omit `coordinator`.",
         );
       }
+      const environmentId =
+        input.target === undefined
+          ? undefined
+          : PeerForwarding.remoteTarget(callerScope, input.target.environmentId);
+      const defaultsIsolation =
+        coordinatorSettings !== undefined &&
+        environmentId === undefined &&
+        input.isolation === undefined;
       if (coordinatorSettings !== undefined) {
         input = withCoordinatorDefaults(input, {
           modelSelection: coordinatorSettings.coordinatorWorkerModelSelection,
-          isolation: coordinatorSettings.coordinatorWorkerIsolation,
+          // A linked environment's task runs in that project's checkout; RemoteDelegation refuses worktrees.
+          isolation:
+            environmentId === undefined
+              ? coordinatorSettings.coordinatorWorkerIsolation
+              : undefined,
           standingInstructions: coordinatorSettings.coordinatorStandingInstructions,
         });
+      }
+      const requireWorkerCapacity =
+        coordinatorSettings === undefined
+          ? Effect.void
+          : Effect.gen(function* () {
+              const maxWorkers = coordinatorSettings.coordinatorMaxParallelWorkers;
+              const { subagents } = yield* threadManagement
+                .getThreadRecords(parent.thread.id, ["subagents"], { omitSettledSubagents: true })
+                .pipe(Effect.mapError(threadManagementFailure));
+              const runningWorkers = subagents.filter(
+                (task) =>
+                  task.origin === "app_owned" &&
+                  (task.status === "pending" ||
+                    task.status === "running" ||
+                    task.status === "waiting"),
+              ).length;
+              if (runningWorkers >= maxWorkers) {
+                return yield* failure(
+                  "invalid_request",
+                  `This coordinator already has ${runningWorkers} running workers, its limit of ${maxWorkers}. Wait for one to finish (its completion wakes you), or task_cancel one you no longer need, then delegate again.`,
+                );
+              }
+            });
+      // Only the capacity check and the task's record need the lock; waiting on the task does not.
+      const withWorkerSlot = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        coordinatorSettings === undefined
+          ? effect
+          : coordinatorDelegations.withLock(parent.thread.id, effect);
+      if (input.target !== undefined && environmentId !== undefined) {
+        const remoteInput = { ...input, target: { ...input.target, environmentId } };
+        // The task's child runs as an ordinary thread there; this thread keeps the task.
+        const { taskId } = yield* withWorkerSlot(
+          requireWorkerCapacity.pipe(Effect.andThen(remoteDelegation.delegate(scope, remoteInput))),
+        );
+        return yield* input.mode === "wait"
+          ? awaitTask(scope, taskId, taskId, input.timeoutMs)
+          : readTask(scope, taskId, false, true);
       }
       if (
         input.target?.projectId !== undefined &&
@@ -2810,6 +2861,7 @@ const make = Effect.gen(function* () {
           "Delegated tasks require an active run owned by this MCP provider session.",
         );
       }
+      const parentNodeId = parentRun.rootNodeId;
       const providers = yield* loadProviders;
       const key = yield* requestKey(input.clientRequestId);
       const commandId = stableCommandId({
@@ -2818,113 +2870,105 @@ const make = Effect.gen(function* () {
         operation: "delegate-task",
       });
       const isRetryOfAcceptedDelegation = yield* threadManagement.hasReceipt(commandId);
-      if (coordinatorSettings !== undefined && !isRetryOfAcceptedDelegation) {
-        const maxWorkers = coordinatorSettings.coordinatorMaxParallelWorkers;
-        const childThreadIds = yield* threadManagement
-          .listAppOwnedChildThreadIds(parent.thread.id)
-          .pipe(Effect.mapError(threadManagementFailure));
-        const childShells = yield* Effect.forEach(
-          childThreadIds,
-          (childThreadId) =>
-            threadManagement
-              .getThreadShell(childThreadId)
-              .pipe(Effect.mapError(threadManagementFailure)),
-          { concurrency: "unbounded" },
-        );
-        const runningWorkers = childShells.filter(
-          (shell) =>
-            shell !== null &&
-            shell.deletedAt === null &&
-            shell.status !== "idle" &&
-            !ThreadManagementService.isTerminalRunStatus(shell.status),
-        ).length;
-        if (runningWorkers >= maxWorkers) {
-          return yield* failure(
-            "invalid_request",
-            `This coordinator already has ${runningWorkers} running workers, its limit of ${maxWorkers}. Wait for one to finish (its completion wakes you), or task_cancel one you no longer need, then delegate again.`,
+      const { result, isolationNote } = yield* withWorkerSlot(
+        Effect.gen(function* () {
+          if (!isRetryOfAcceptedDelegation) yield* requireWorkerCapacity;
+          const target = yield* resolveTargetRechecking({
+            parent,
+            target: input.target,
+            providers,
+            cwd: yield* parentWorkspaceCwd(parent),
+            skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
+          });
+          const runtimeMode = yield* resolveRuntimeMode(
+            parent.thread.runtimeMode,
+            input.runtimeMode,
+            target,
           );
-        }
-      }
-      const target = yield* resolveTargetRechecking({
-        parent,
-        target: input.target,
-        providers,
-        cwd: yield* parentWorkspaceCwd(parent),
-        skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
-      });
-      const runtimeMode = yield* resolveRuntimeMode(
-        parent.thread.runtimeMode,
-        input.runtimeMode,
-        target,
-      );
-      const interactionMode = yield* resolveInteractionMode(
-        parent.thread.interactionMode,
-        input.interactionMode,
-      );
-      let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
-      if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
-        const project = yield* requireProject(parent.thread.projectId);
-        const base = yield* gitDriver
-          .resolveCommit({
-            cwd: parent.thread.worktreePath ?? project.workspaceRoot,
-            revision: "HEAD",
-          })
-          .pipe(
-            Effect.mapError(() =>
-              failure("invalid_request", "Unable to resolve the parent checkout commit."),
-            ),
+          const interactionMode = yield* resolveInteractionMode(
+            parent.thread.interactionMode,
+            input.interactionMode,
           );
-        // Launch preparation creates the worktree from the project root, so a
-        // parent checkout in another repository (such as a Git folder inside
-        // Scratch) would hand it a commit it cannot find.
-        if (parent.thread.worktreePath !== null) {
-          yield* gitDriver
-            .resolveCommit({ cwd: project.workspaceRoot, revision: base.commitSha })
-            .pipe(
-              Effect.mapError(() =>
-                failure(
+          let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
+          let isolationNote: string | undefined;
+          if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
+            const project = yield* requireProject(parent.thread.projectId);
+            const base = yield* gitDriver
+              .resolveCommit({
+                cwd: parent.thread.worktreePath ?? project.workspaceRoot,
+                revision: "HEAD",
+              })
+              .pipe(Effect.option);
+            if (Option.isNone(base)) {
+              if (!defaultsIsolation) {
+                return yield* failure(
                   "invalid_request",
-                  `Isolation "worktree" creates the child checkout in project "${project.title}" (${project.workspaceRoot}), which does not contain the parent checkout's commit. Use isolation "shared" to work in the parent's checkout.`,
-                ),
+                  "Unable to resolve the parent checkout commit.",
+                );
+              }
+              // The user's default, not the agent's choice, so a project without git still gets a worker.
+              isolationNote =
+                "No git commit here to branch a worktree from, so the worker shares your checkout.";
+            } else {
+              // Launch preparation creates the worktree from the project root, so a
+              // parent checkout in another repository (such as a Git folder inside
+              // Scratch) would hand it a commit it cannot find.
+              if (parent.thread.worktreePath !== null) {
+                yield* gitDriver
+                  .resolveCommit({ cwd: project.workspaceRoot, revision: base.value.commitSha })
+                  .pipe(
+                    Effect.mapError(() =>
+                      failure(
+                        "invalid_request",
+                        `Isolation "worktree" creates the child checkout in project "${project.title}" (${project.workspaceRoot}), which does not contain the parent checkout's commit. Use isolation "shared" to work in the parent's checkout.`,
+                      ),
+                    ),
+                  );
+              }
+              workspaceStrategy = {
+                type: "worktree",
+                baseRef: base.value.commitSha,
+                startFromOrigin: false,
+              };
+            }
+          }
+          // ThreadManagementService.dispatch is the chokepoint for this command
+          // type's own enablement check, using the same command id and its
+          // receipt-replay exemption, so no separate assert runs here.
+          const result = yield* threadManagement
+            .dispatch({
+              type: "delegated_task.request",
+              createdBy: "agent",
+              creationSource: "mcp",
+              commandId,
+              parentThreadId: scope.thread.threadId,
+              parentRunId: parentRun.id,
+              parentNodeId,
+              task: taskPrompt(input),
+              ...(input.title === undefined ? {} : { title: input.title }),
+              modelSelection: target.modelSelection,
+              runtimeMode,
+              interactionMode,
+              ...(input.coordinator === true ? { coordinator: true } : {}),
+              ...(workspaceStrategy === undefined ? {} : { workspaceStrategy }),
+              // Async delegations wake the parent on every child terminal; wait
+              // delegations deliver through the blocking tool call until `awaitTask`
+              // gives up the wait (timeout, cancelled call) and upgrades the wake.
+              completionWake: input.mode === "wait" ? "settled_only" : "always",
+            })
+            .pipe(
+              Effect.mapError((error) =>
+                error._tag === "ThreadManagementProviderInstanceDisabledError"
+                  ? threadManagementFailure(error)
+                  : failure(
+                      "orchestration_error",
+                      `Unable to create delegated task: ${userFacingDispatchErrorMessage(error) ?? errorMessage(error)}`,
+                    ),
               ),
             );
-        }
-        workspaceStrategy = { type: "worktree", baseRef: base.commitSha, startFromOrigin: false };
-      }
-      // ThreadManagementService.dispatch is the chokepoint for this command
-      // type's own enablement check, using the same command id and its
-      // receipt-replay exemption, so no separate assert runs here.
-      const result = yield* threadManagement
-        .dispatch({
-          type: "delegated_task.request",
-          createdBy: "agent",
-          creationSource: "mcp",
-          commandId,
-          parentThreadId: scope.thread.threadId,
-          parentRunId: parentRun.id,
-          parentNodeId: parentRun.rootNodeId,
-          task: taskPrompt(input),
-          ...(input.title === undefined ? {} : { title: input.title }),
-          modelSelection: target.modelSelection,
-          runtimeMode,
-          interactionMode,
-          ...(input.coordinator === true ? { coordinator: true } : {}),
-          ...(workspaceStrategy === undefined ? {} : { workspaceStrategy }),
-          // Async delegations wake the parent on every child terminal; wait
-          // delegations deliver through the blocking tool call until `awaitTask`
-          // gives up the wait (timeout, cancelled call) and upgrades the wake.
-          completionWake: input.mode === "wait" ? "settled_only" : "always",
-        })
-        .pipe(
-          Effect.mapError((error) =>
-            error._tag === "ThreadManagementProviderInstanceDisabledError"
-              ? threadManagementFailure(error)
-              : failure(
-                  "orchestration_error",
-                  `Unable to create delegated task: ${userFacingDispatchErrorMessage(error) ?? errorMessage(error)}`,
-                ),
-          ),
-        );
+          return { result, isolationNote };
+        }),
+      );
       const taskEvent = result.storedEvents.find(
         (stored) =>
           stored.event.type === "subagent.updated" && stored.event.payload.origin === "app_owned",
@@ -2952,9 +2996,18 @@ const make = Effect.gen(function* () {
         });
       }
 
-      return yield* input.mode === "wait"
+      const delegated = yield* input.mode === "wait"
         ? awaitTask(scope, taskId, key, input.timeoutMs)
         : readTask(scope, taskId, false, true);
+      return isolationNote === undefined
+        ? delegated
+        : {
+            ...delegated,
+            workspace: {
+              ...(delegated.workspace ?? { isolation: "shared" as const }),
+              note: isolationNote,
+            },
+          };
     }),
     taskStatus: Effect.fn("OrchestratorMcpService.taskStatus")(function* (callerScope, taskId) {
       const scope = yield* requireThreadScope(callerScope, "task_status");

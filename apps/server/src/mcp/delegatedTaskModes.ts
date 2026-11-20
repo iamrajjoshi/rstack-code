@@ -96,10 +96,12 @@ export function withCoordinatorDefaults(
   input: OrchestratorMcpDelegateTaskInput,
   defaults: {
     readonly modelSelection: ModelSelection;
-    readonly isolation: "worktree" | "shared";
+    /** Undefined leaves isolation to the agent and the target. */
+    readonly isolation: "worktree" | "shared" | undefined;
     readonly standingInstructions: string;
   },
 ): OrchestratorMcpDelegateTaskInput {
+  const isolation = input.isolation ?? defaults.isolation;
   const target = input.target;
   const namesTarget =
     target?.providerInstanceId !== undefined ||
@@ -118,7 +120,7 @@ export function withCoordinatorDefaults(
             ? { options: defaultOptions }
             : {}),
         },
-    isolation: input.isolation ?? defaults.isolation,
+    ...(isolation === undefined ? {} : { isolation }),
     task:
       defaults.standingInstructions === ""
         ? input.task
