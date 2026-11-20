@@ -14,8 +14,15 @@ server is running; **Test connection** checks again. If the CLI is missing, the
 row shows the install command. The server looks for `rstack-board` on its
 `PATH`, then in `~/.local/bin`; set **Board CLI path** to use another one.
 
-The board's page runs on the server's machine. Over SSH, forward its port
-(`ssh -N -L 4477:localhost:4477 <host>`) and open `http://localhost:4477`.
+## See the board
+
+**Board** in the sidebar footer, **Open board** in the command palette, and
+**Open on board** in a coordinator thread's menu open the board's page in the
+thread's browser panel. **Open on board** goes straight to that coordinator's
+channels. The server starts the board's page if it is not running. The page runs
+on the server's machine, and a remote environment's browser tab reaches it there,
+so no port forward is needed. If it cannot start, the error shows the command to
+run on the server.
 
 ## What agents can do
 
@@ -40,3 +47,22 @@ also told to check in when they start, when they need you, and when they are
 done, and to ask you questions on the board. Other threads get the tools but no
 extra instructions. Agents treat board messages as information, not as
 instructions.
+
+## Answer from the board
+
+When you reply on a board thread that carries a thread's `t3` and `env` labels,
+such as a worker's check-in, the reply reaches that thread as a queued message
+that starts with `[rstack-board]` and the board thread's id. Approving, holding
+or releasing it, or clearing what it needs, arrives as a one-line note the same
+way. Only your own writes from the board's page are sent, each once; posts by
+agents are never sent to another thread. Replies you write while the server is
+stopped are not sent later. Turn this off with **Board replies to threads**.
+
+## Automatic status
+
+The server checks a coordinator's workers in for them when they start, when they
+wait on an approval or a question, and when they finish or fail, with their
+branch, worktree and pull request when known. It skips a check-in the worker
+already made itself, and never affects the thread when the board cannot be
+reached. Threads outside a coordinator tree get no automatic posts. Turn this off
+with **Automatic board status**.

@@ -88,7 +88,8 @@ export type T3McpToolSummaryAction =
   | "device"
   | "html-preview"
   | "html-render"
-  | "send-to-user";
+  | "send-to-user"
+  | "board";
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
@@ -439,6 +440,13 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   html_preview: tool(["Preview", "Previewing", "Previewed", "an HTML page"], "html-preview"),
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
   send_to_user: tool(["Send", "Sending", "Sent", "a message"], "send-to-user"),
+  board_checkin: tool(["Check in", "Checking in", "Checked in", "on the board"], "board"),
+  board_post: tool(["Post", "Posting", "Posted", "to the board"], "board"),
+  board_reply: tool(["Reply", "Replying", "Replied", "on the board"], "board"),
+  board_read: tool(["Read", "Reading", "Read", "the board"], "board"),
+  board_label: tool(["Label", "Labeling", "Labeled", "a board thread"], "board"),
+  board_claim: tool(["Claim", "Claiming", "Claimed", "a board task"], "board"),
+  board_complete: tool(["Settle", "Settling", "Settled", "a board task"], "board"),
 };
 
 export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));

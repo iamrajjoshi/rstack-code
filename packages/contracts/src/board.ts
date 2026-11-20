@@ -1,5 +1,7 @@
 import * as Schema from "effect/Schema";
 
+import { ThreadId } from "./baseSchemas.ts";
+
 /** From the board's README; Settings shows it while the CLI is missing. */
 export const BOARD_INSTALL_COMMAND =
   "git clone https://github.com/iamrajjoshi/rstack-board.git && cd rstack-board && pnpm install && pnpm build && npm link";
@@ -20,3 +22,22 @@ export const BoardStatus = Schema.Struct({
   error: Schema.NullOr(Schema.String),
 });
 export type BoardStatus = typeof BoardStatus.Type;
+
+/** Starts the board's page on the server's machine when it is not running. */
+export const BOARD_OPEN_COMMAND = "rstack-board open --no-open";
+
+export const BoardOpenInput = Schema.Struct({
+  /** A coordinator's thread, or one of its workers', opens that coordinator's channels. */
+  threadId: Schema.optionalKey(ThreadId),
+});
+export type BoardOpenInput = typeof BoardOpenInput.Type;
+
+export const BoardOpenResult = Schema.Struct({
+  /** The board's page as the server's machine reaches it, such as `http://localhost:4477/#/needs`. */
+  url: Schema.String,
+});
+export type BoardOpenResult = typeof BoardOpenResult.Type;
+
+export class BoardOpenError extends Schema.TaggedError<BoardOpenError>()("BoardOpenError", {
+  message: Schema.String,
+}) {}

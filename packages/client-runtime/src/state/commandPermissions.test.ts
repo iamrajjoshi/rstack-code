@@ -179,6 +179,7 @@ describe("command permissions", () => {
     WS_METHODS.serverCheckOtlpEndpoint,
     WS_METHODS.serverCheckSecretSource,
     WS_METHODS.boardStatus,
+    WS_METHODS.boardOpen,
   ])("requires the destination settings grant for %s", (method) =>
     Effect.gen(function* () {
       const registry = yield* setup;

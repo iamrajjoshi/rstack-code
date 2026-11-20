@@ -63,6 +63,19 @@ export const BoardThreadView = Schema.Struct({
   omittedReplies: Schema.optionalKey(Schema.Number),
 });
 
+export interface BoardCheckinInput {
+  /** `failed` is the server's own: agents report a failure in their note instead. */
+  readonly status: typeof BoardCheckinStatus.Type | "failed";
+  readonly note: string;
+  readonly needs?: typeof BoardNeeds.Type | undefined;
+  readonly pr?: number | undefined;
+  readonly branch?: string | undefined;
+  readonly worktree?: string | undefined;
+}
+
+const checkinState = (input: BoardCheckinInput) =>
+  input.status === "needs_input" ? "blocked" : input.status;
+
 export interface BoardCaller {
   readonly threadId: ThreadId;
   readonly environmentId: EnvironmentId;
@@ -135,17 +148,24 @@ export class BoardBridge extends Context.Service<
     readonly identity: (caller: BoardCaller) => Effect.Effect<BoardIdentity, BoardBridgeError>;
     readonly checkin: (
       caller: BoardCaller,
-      input: {
-        readonly status: typeof BoardCheckinStatus.Type;
-        readonly note: string;
-        readonly needs?: typeof BoardNeeds.Type | undefined;
-        readonly pr?: number | undefined;
-        readonly branch?: string | undefined;
-      },
+      input: BoardCheckinInput,
     ) => Effect.Effect<
       { readonly id: string; readonly channel: string; readonly labels: Record<string, string> },
       BoardBridgeError
     >;
+    /**
+     * The server's own check-in for a coordinator's worker. Posts nothing for other threads, or
+     * when the worker's check-in thread already shows this state, such as after its own.
+     */
+    readonly autoCheckin: (
+      caller: BoardCaller,
+      input: BoardCheckinInput,
+    ) => Effect.Effect<"posted" | "unchanged" | "not_a_worker", BoardBridgeError>;
+    /**
+     * Starts the board's page if it is not running. With a caller in a coordinator tree, the
+     * address shows that coordinator's channels; otherwise the board's first view.
+     */
+    readonly webUrl: (caller: BoardCaller | null) => Effect.Effect<string, BoardBridgeError>;
     readonly post: (
       caller: BoardCaller,
       input: {
@@ -222,7 +242,7 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const identity = Effect.fn("BoardBridge.identity")(function* (caller: BoardCaller) {
+  const resolve = Effect.fn("BoardBridge.resolve")(function* (caller: BoardCaller) {
     const thread = yield* shell(caller.threadId);
     const ancestors: Array<OrchestrationV2ThreadShell> = [];
     let current = thread;
@@ -240,25 +260,30 @@ const make = Effect.gen(function* () {
       .getById(thread.projectId)
       .pipe(Effect.orElseSucceed(() => Option.none()));
     const settings = yield* settingsService.getSettings;
-    return deriveBoardIdentity({
-      thread,
-      ancestors,
-      projectTitle: Option.isSome(project) ? project.value.title : null,
-      environmentId: caller.environmentId,
-      settings,
-      handleOf,
-    });
+    return {
+      identity: deriveBoardIdentity({
+        thread,
+        ancestors,
+        projectTitle: Option.isSome(project) ? project.value.title : null,
+        environmentId: caller.environmentId,
+        settings,
+        handleOf,
+      }),
+      worker: ancestors.some((ancestor) => ancestor.coordinator === true),
+    };
+  });
+
+  const identity = Effect.fn("BoardBridge.identity")(function* (caller: BoardCaller) {
+    return (yield* resolve(caller)).identity;
   });
 
   const traceLabels = (who: BoardIdentity) => ({ t3: who.labels.t3, env: who.labels.env });
 
-  const checkin = Effect.fn("BoardBridge.checkin")(function* (
+  const postCheckin = Effect.fn("BoardBridge.postCheckin")(function* (
     caller: BoardCaller,
-    input: Parameters<BoardBridge["Service"]["checkin"]>[1],
+    who: BoardIdentity,
+    input: BoardCheckinInput,
   ) {
-    const who = yield* identity(caller);
-    const state =
-      input.status === "working" ? "working" : input.status === "done" ? "done" : "blocked";
     const thread = yield* board.run(
       {
         args: [
@@ -266,13 +291,14 @@ const make = Effect.gen(function* () {
           "--file",
           "-",
           "--state",
-          state,
+          checkinState(input),
           ...(who.coordinator === undefined ? [] : ["--coordinator", who.coordinator]),
           ...(input.status === "needs_input" ? ["--needs", input.needs ?? "answer"] : []),
           ...(input.status === "needs_input" ? [] : ["--unset", "needs"]),
           ...(input.pr === undefined ? [] : ["--pr", String(input.pr)]),
           ...labelArgs({
             ...(input.branch === undefined ? {} : { branch: input.branch }),
+            ...(input.worktree === undefined ? {} : { worktree: input.worktree }),
             ...traceLabels(who),
           }),
         ],
@@ -283,6 +309,44 @@ const make = Effect.gen(function* () {
       BoardService.BoardThreadSummary,
     );
     return { id: thread.id, channel: thread.channel, labels: thread.labels };
+  });
+
+  const checkin = Effect.fn("BoardBridge.checkin")(function* (
+    caller: BoardCaller,
+    input: BoardCheckinInput,
+  ) {
+    return yield* postCheckin(caller, yield* identity(caller), input);
+  });
+
+  const autoCheckin = Effect.fn("BoardBridge.autoCheckin")(function* (
+    caller: BoardCaller,
+    input: BoardCheckinInput,
+  ) {
+    const { identity: who, worker } = yield* resolve(caller);
+    if (!worker) return "not_a_worker" as const;
+    // The board keeps one check-in thread per worker, labelled with its thread id.
+    const { threads: found } = yield* board.run(
+      {
+        args: [
+          "read",
+          "-n",
+          "1",
+          "--label",
+          `t3=${caller.threadId}`,
+          "--",
+          who.coordinator === undefined ? "threads" : `${who.coordinator}/workers`,
+        ],
+        threadId: caller.threadId,
+      },
+      BoardService.BoardThreadList,
+    );
+    const current = found[0]?.labels;
+    const needs = input.status === "needs_input" ? (input.needs ?? "answer") : undefined;
+    if (current?.state === checkinState(input) && current.needs === needs) {
+      return "unchanged" as const;
+    }
+    yield* postCheckin(caller, who, input);
+    return "posted" as const;
   });
 
   const post = Effect.fn("BoardBridge.post")(function* (
@@ -427,7 +491,29 @@ const make = Effect.gen(function* () {
     return { id: thread.id, labels: thread.labels };
   });
 
-  return BoardBridge.of({ identity, checkin, post, reply, read, label, claim, complete });
+  const webUrl = Effect.fn("BoardBridge.webUrl")(function* (caller: BoardCaller | null) {
+    const coordinator = caller === null ? undefined : (yield* identity(caller)).coordinator;
+    const { url } = yield* board.run(
+      { args: ["open", "--no-open"] },
+      Schema.Struct({ url: Schema.String }),
+    );
+    const base = url.replace(/\/+$/u, "");
+    // The board's hash router: `#/c/<name>/` is everything under a coordinator.
+    return coordinator === undefined ? `${base}/` : `${base}/#/c/${coordinator}/`;
+  });
+
+  return BoardBridge.of({
+    identity,
+    checkin,
+    autoCheckin,
+    webUrl,
+    post,
+    reply,
+    read,
+    label,
+    claim,
+    complete,
+  });
 });
 
 export const layer = Layer.effect(BoardBridge, make);

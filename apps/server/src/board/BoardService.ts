@@ -1,14 +1,17 @@
 import { type BoardStatus, ServerSettingsError } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveCommandPath } from "@t3tools/shared/shell";
+import { resolveCommandPath, resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -96,10 +99,38 @@ export type BoardThread = typeof BoardThread.Type;
 export const BoardThreadList = Schema.Struct({ threads: Schema.Array(BoardThreadSummary) });
 export const BoardLabels = Schema.Struct({ labels: Labels });
 
+const BoardEventFields = {
+  cursor: Schema.Number,
+  threadId: Schema.String,
+  channel: Schema.String,
+  /** Who made the change: an agent's handle, or the person's for writes from the board's page. */
+  actor: Schema.String,
+  at: Schema.String,
+};
+export const BoardEvent = Schema.Union([
+  Schema.Struct({
+    ...BoardEventFields,
+    type: Schema.Literal("message.posted"),
+    message: BoardMessage,
+  }),
+  Schema.Struct({
+    ...BoardEventFields,
+    type: Schema.Literal("labels.changed"),
+    set: Labels,
+    unset: Schema.Array(Schema.String),
+    labels: Labels,
+  }),
+]);
+export type BoardEvent = typeof BoardEvent.Type;
+// The board only adds event types; a line this server does not know is skipped.
+const decodeBoardEvent = Schema.decodeOption(Schema.fromJsonString(BoardEvent));
+
 const CliStatus = Schema.Struct({
   running: Schema.Boolean,
   url: Schema.NullOr(Schema.String),
   database: Schema.String,
+  version: Schema.optional(Schema.String),
+  person: Schema.optional(Schema.String),
 });
 const decodeCliFailure = Schema.decodeOption(
   Schema.fromJsonString(
@@ -124,6 +155,13 @@ export class BoardService extends Context.Service<
     readonly status: Effect.Effect<BoardStatus>;
     /** Turned on in settings and the CLI answered within the last minute. */
     readonly isConnected: Effect.Effect<boolean>;
+    /**
+     * Runs `status` now: the handle the board records writes from its page under, or null while
+     * the board is not usable or its CLI is too old to say.
+     */
+    readonly person: Effect.Effect<string | null>;
+    /** `tail --json` with these arguments: new events from now until the scope closes. */
+    readonly tail: (args: ReadonlyArray<string>) => Stream.Stream<BoardEvent, BoardError>;
     /** Runs one command with `--json` and decodes its output; extra fields are ignored. */
     readonly run: <A>(
       command: BoardCommand,
@@ -141,9 +179,16 @@ const cap = (text: string) =>
 const make = Effect.gen(function* () {
   const settingsService = yield* ServerSettings.ServerSettingsService;
   const processRunner = yield* ProcessRunner.ProcessRunner;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const probed = yield* Ref.make<
-    { readonly cliSetting: string; readonly at: number; readonly status: BoardStatus } | undefined
+    | {
+        readonly cliSetting: string;
+        readonly at: number;
+        readonly status: BoardStatus;
+        readonly person: string | null;
+      }
+    | undefined
   >(undefined);
 
   const resolveCli = Effect.fn("BoardService.resolveCli")(function* (cliSetting: string) {
@@ -223,29 +268,34 @@ const make = Effect.gen(function* () {
   const probe = Effect.fn("BoardService.probe")(function* (enabled: boolean, cliSetting: string) {
     const attempt = Effect.gen(function* () {
       const cli = yield* resolveCli(cliSetting);
-      const version = (yield* exec(cli, { args: ["--version"] })).trim();
       const status = yield* decode("status", yield* exec(cli, { args: ["status"] }), CliStatus);
       return {
-        enabled,
-        installed: true,
-        cliPath: cli,
-        version: version === "" ? null : version,
-        databasePath: status.database,
-        webUrl: status.running ? status.url : null,
-        error: null,
-      } satisfies BoardStatus;
+        status: {
+          enabled,
+          installed: true,
+          cliPath: cli,
+          version: status.version?.trim() || null,
+          databasePath: status.database,
+          webUrl: status.running ? status.url : null,
+          error: null,
+        } satisfies BoardStatus,
+        person: status.person?.trim() || null,
+      };
     });
     return yield* attempt.pipe(
       Effect.catch((error) =>
         Effect.succeed({
-          enabled,
-          installed: error._tag !== "BoardNotInstalledError",
-          cliPath: error._tag === "BoardNotInstalledError" ? error.cliPath : null,
-          version: null,
-          databasePath: null,
-          webUrl: null,
-          error: error.message,
-        } satisfies BoardStatus),
+          status: {
+            enabled,
+            installed: error._tag !== "BoardNotInstalledError",
+            cliPath: error._tag === "BoardNotInstalledError" ? error.cliPath : null,
+            version: null,
+            databasePath: null,
+            webUrl: null,
+            error: error.message,
+          } satisfies BoardStatus,
+          person: null,
+        }),
       ),
     );
   });
@@ -254,15 +304,15 @@ const make = Effect.gen(function* () {
     enabled: boolean,
     cliSetting: string,
   ) {
-    const status = yield* probe(enabled, cliSetting);
+    const result = yield* probe(enabled, cliSetting);
     const at = yield* Clock.currentTimeMillis;
-    yield* Ref.set(probed, { cliSetting, at, status });
-    return status;
+    yield* Ref.set(probed, { cliSetting, at, ...result });
+    return result;
   });
 
   const status = Effect.gen(function* () {
     const settings = yield* settingsService.getSettings;
-    return yield* refresh(settings.boardEnabled, settings.boardCliPath);
+    return (yield* refresh(settings.boardEnabled, settings.boardCliPath)).status;
   }).pipe(
     Effect.catchTags({
       ServerSettingsError: (error) =>
@@ -289,7 +339,7 @@ const make = Effect.gen(function* () {
       last.cliSetting === settings.boardCliPath &&
       now - last.at < PROBE_TTL_MS
         ? last.status
-        : yield* refresh(true, settings.boardCliPath);
+        : (yield* refresh(true, settings.boardCliPath)).status;
     return current.error === null;
   }).pipe(
     Effect.orElseSucceed(() => false),
@@ -307,9 +357,62 @@ const make = Effect.gen(function* () {
     return yield* decode(commandLabel(command.args), stdout, success);
   });
 
+  const person = Effect.gen(function* () {
+    const settings = yield* settingsService.getSettings;
+    if (!settings.boardEnabled) return null;
+    return (yield* refresh(true, settings.boardCliPath)).person;
+  }).pipe(
+    Effect.orElseSucceed(() => null),
+    Effect.withSpan("BoardService.person"),
+  );
+
+  const tail = (args: ReadonlyArray<string>) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const settings = yield* settingsService.getSettings;
+        if (!settings.boardEnabled) return yield* new BoardNotConnectedError();
+        const cli = yield* resolveCli(settings.boardCliPath);
+        const env = yield* HostProcess.Environment;
+        const command = yield* resolveSpawnCommand(cli, ["--json", "tail", ...args], {
+          env,
+          extendEnv: true,
+        });
+        const child = yield* spawner
+          .spawn(
+            ChildProcess.make(command.command, command.args, {
+              env,
+              extendEnv: true,
+              shell: command.shell,
+              stdin: "ignore",
+              stderr: "ignore",
+              forceKillAfter: "1 second",
+            }),
+          )
+          .pipe(
+            Effect.mapError(() => new BoardNotInstalledError({ cliPath: cli })),
+            Effect.catchDefect(() => Effect.fail(new BoardNotInstalledError({ cliPath: cli }))),
+          );
+        // The stream ends only when the CLI exits, which a healthy `tail` never does.
+        return child.stdout.pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.flatMap((line) => {
+            const event = decodeBoardEvent(line);
+            return event._tag === "Some" ? Stream.succeed(event.value) : Stream.empty;
+          }),
+          Stream.mapError(
+            (cause) => new BoardCommandError({ command: "tail", reason: "crashed", cause }),
+          ),
+          Stream.concat(Stream.fail(new BoardCommandError({ command: "tail", reason: "exited" }))),
+        );
+      }),
+    ).pipe(Stream.withSpan("BoardService.tail"));
+
   return BoardService.of({
     status,
     isConnected,
+    person,
+    tail,
     run,
   });
 });

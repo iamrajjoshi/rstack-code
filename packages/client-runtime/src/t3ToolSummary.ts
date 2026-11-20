@@ -850,6 +850,23 @@ export function summarizeT3ToolCalls(
           );
       break;
     }
+    case "board": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Used the board {count} time} other {Used the board {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to use the board {count} time} other {Tried to use the board {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
     case "thread-list": {
       const count = selected.length;
       label = done

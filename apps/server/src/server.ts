@@ -107,7 +107,10 @@ import * as DesktopBrowserChannel from "./preview/DesktopBrowserChannel.ts";
 import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
+import * as BoardBridge from "./board/BoardBridge.ts";
+import * as BoardReplyReactor from "./board/BoardReplyReactor.ts";
 import * as BoardService from "./board/BoardService.ts";
+import * as BoardStatusReactor from "./board/BoardStatusReactor.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
@@ -728,6 +731,16 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       yield* service.start();
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      yield* (yield* BoardReplyReactor.BoardReplyReactor).start();
+      yield* (yield* BoardStatusReactor.BoardStatusReactor).start();
+    }),
+  ).pipe(
+    Layer.provide(Layer.merge(BoardReplyReactor.layer, BoardStatusReactor.layer)),
+    // The instance /mcp's board tools use too, by layer memoization; WebSocket opens the board.
+    Layer.provideMerge(BoardBridge.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService))),
+  ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   ProviderInstallation.layer,

@@ -24,6 +24,7 @@ export type ThreadActionMenuId =
   | "regenerate-title"
   | "mark-unread"
   | "share-guest"
+  | "open-on-board"
   | "copy"
   | "copy-path"
   | "copy-branch"
@@ -123,6 +124,8 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  /** A coordinator, on an environment with rstack-board turned on. */
+  readonly canOpenOnBoard?: boolean;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -133,6 +136,7 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "project-settings",
     "mark-unread",
     "share-guest",
+    "open-on-board",
     "copy",
     "copy-path",
     "copy-branch",
@@ -222,6 +226,15 @@ export function buildThreadActionMenuItems(
     { id: "mark-unread", label: resolve(msg("Mark unread")), icon: "mail-open" },
     ...(state.canShareWithGuest
       ? [{ id: "share-guest" as const, label: resolve(msg("Share with guest")), icon: "user-plus" }]
+      : []),
+    ...(state.canOpenOnBoard
+      ? [
+          {
+            id: "open-on-board" as const,
+            label: resolve(msg("Open on board")),
+            icon: "message-square",
+          },
+        ]
       : []),
     ...(state.projectFilter
       ? [

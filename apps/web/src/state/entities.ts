@@ -383,6 +383,13 @@ export function readEnvironmentSupportsServerBrowser(environmentId: EnvironmentI
   );
 }
 
+export function readEnvironmentBoardEnabled(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.settings.boardEnabled ===
+    true
+  );
+}
+
 export function readEnvironmentServerConfigLoaded(environmentId: EnvironmentId): boolean {
   return appAtomRegistry.get(environmentServerConfigsAtom).has(environmentId);
 }

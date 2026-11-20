@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -18,9 +19,14 @@ let stdin = "";
 try { stdin = fs.readFileSync(0, "utf8"); } catch {}
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, stdin, thread: process.env.T3CODE_THREAD_ID ?? null }) + "\\n");
 const rest = args.filter((arg, index) => arg !== "--json" && args[index - 1] !== "--as" && arg !== "--as");
-if (rest[0] === "--version") { console.log("0.1.0"); process.exit(0); }
 if (rest[0] === "status") {
-  console.log(JSON.stringify({ running: true, url: "http://localhost:4477", pid: 1, stateDir: "/b", database: "/b/board.db" }));
+  console.log(JSON.stringify({ running: true, url: "http://localhost:4477", pid: 1, stateDir: "/b", database: "/b/board.db", version: "0.1.0", person: "raj" }));
+  process.exit(0);
+}
+if (rest[0] === "tail") {
+  const base = { threadId: "msg_1", channel: "prs", actor: "raj", at: "t" };
+  console.log(JSON.stringify({ ...base, cursor: 7, type: "thread.renamed" }));
+  console.log(JSON.stringify({ ...base, cursor: 8, type: "labels.changed", set: { decision: "approved" }, unset: ["needs"], labels: { decision: "approved" } }));
   process.exit(0);
 }
 if (rest[0] === "reply" && rest[1] === "msg_missing") {
@@ -114,6 +120,37 @@ describe("BoardService", () => {
       });
       assert.match(status.cliPath ?? "", /home\/\.local\/bin\/rstack-board$/u);
       assert.isTrue(yield* withHost(board.isConnected));
+    }).pipe(Effect.scoped, Effect.provide(layer(true))),
+  );
+
+  it.live("tails events, skipping kinds it does not know, and fails when the CLI exits", () =>
+    Effect.gen(function* () {
+      const { calls, withHost } = yield* setup("path");
+      const board = yield* BoardService.BoardService;
+      assert.strictEqual(yield* withHost(board.person), "raj");
+      const exit = yield* withHost(
+        board.tail(["--by", "raj"]).pipe(Stream.runCollect, Effect.flip),
+      );
+      assert.include(exit, { _tag: "BoardCommandError", command: "tail", reason: "exited" });
+      const seen: Array<BoardService.BoardEvent> = [];
+      yield* withHost(
+        board.tail([]).pipe(
+          Stream.runForEach((event) => Effect.sync(() => seen.push(event))),
+          Effect.ignore,
+        ),
+      );
+      assert.deepEqual(
+        seen.map((event) => [event.type, event.cursor]),
+        [["labels.changed", 8]],
+      );
+      assert.deepEqual(
+        (yield* calls).map((call) => call.args),
+        [
+          ["--json", "status"],
+          ["--json", "tail", "--by", "raj"],
+          ["--json", "tail"],
+        ],
+      );
     }).pipe(Effect.scoped, Effect.provide(layer(true))),
   );
 

@@ -164,6 +164,8 @@ import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { canShareWithGuestAtom } from "./chat/guestShareAvailability";
+import { openOnBoardVisible } from "./board/boardEntry.logic";
+import { readBoardEntryState, useOpenBoard } from "./board/useBoardEntry";
 import { openGuestShareDialog } from "./chat/guestShareDialogState";
 import {
   buildThreadRouteParams,
@@ -1005,6 +1007,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
+  const openBoard = useOpenBoard();
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onError: (error) => {
       toastManager.add(
@@ -2812,6 +2815,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: !isNested && canTurnThreadIntoProject(threadRef),
+              canOpenOnBoard: openOnBoardVisible({
+                ...readBoardEntryState(threadRef.environmentId),
+                coordinator: thread.coordinator === true,
+              }),
               // Nested rows render no inline title editor.
               canRename: !fromSearch && !isNested,
               supports: {
@@ -2938,6 +2945,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           case "share-guest":
             openGuestShareDialog(threadRef);
+            return;
+          case "open-on-board":
+            await openBoard(threadRef, { coordinatorView: true });
             return;
           case "regenerate-title": {
             if (isRegeneratingTitle) return;

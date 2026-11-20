@@ -546,6 +546,22 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment-defaults",
   },
   {
+    id: "board-deliver-replies",
+    title: msg("Board replies to threads"),
+    to: "/settings/threads",
+    searchTerms: [msg("rstack-board reply answer approve hold message deliver thread")],
+    environmentOnly: true,
+    scope: "environment-defaults",
+  },
+  {
+    id: "board-auto-status",
+    title: msg("Automatic board status"),
+    to: "/settings/threads",
+    searchTerms: [msg("rstack-board check in status workers coordinator automatic")],
+    environmentOnly: true,
+    scope: "environment-defaults",
+  },
+  {
     id: "working-shelf",
     title: msg("Working section"),
     to: "/settings/general",

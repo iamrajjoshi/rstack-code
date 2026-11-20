@@ -98,6 +98,7 @@ import {
   PersistChatAttachmentsError,
   RpcClientId,
   EnvironmentAuthorizationError,
+  BoardOpenError,
   ThreadId,
   type TerminalMetadataStreamEvent,
   type PullRequestRef,
@@ -260,6 +261,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as OtlpEndpointCheck from "./observability/OtlpEndpointCheck.ts";
+import * as BoardBridge from "./board/BoardBridge.ts";
 import * as BoardService from "./board/BoardService.ts";
 import * as TextGenerators from "./textGeneration/TextGenerators.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
@@ -1584,6 +1586,7 @@ export const layerWsRpc = (
       const secretCheck = yield* SecretCheck.SecretCheck;
       const otlpEndpointCheck = yield* OtlpEndpointCheck.OtlpEndpointCheck;
       const board = yield* BoardService.BoardService;
+      const boardBridge = yield* BoardBridge.BoardBridge;
       const textGenerators = yield* TextGenerators.TextGenerators;
       const sourceControlRepositories =
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
@@ -2749,6 +2752,16 @@ export const layerWsRpc = (
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) => resourceTelemetry.retry,
         [WS_METHODS.serverCheckOtlpEndpoint]: (input) => otlpEndpointCheck.check(input),
         [WS_METHODS.boardStatus]: () => board.status,
+        [WS_METHODS.boardOpen]: (input) =>
+          serverEnvironment.getDescriptor.pipe(
+            Effect.flatMap(({ environmentId }) =>
+              boardBridge.webUrl(
+                input.threadId === undefined ? null : { threadId: input.threadId, environmentId },
+              ),
+            ),
+            Effect.map((url) => ({ url })),
+            Effect.mapError((error) => new BoardOpenError({ message: error.message })),
+          ),
         [WS_METHODS.serverListTextGeneratorModels]: (input) => textGenerators.listModels(input),
         [WS_METHODS.serverPrepareTriage]: (input) => triage.prepare(input),
         [WS_METHODS.serverSignalProcess]: (input) => processDiagnostics.signal(input),

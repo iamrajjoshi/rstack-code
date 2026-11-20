@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  MessagesSquareIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
 import { memo } from "react";
@@ -41,6 +47,8 @@ import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { useBoardEntry } from "~/components/board/useBoardEntry";
+import { useThreadRouteRef } from "~/hooks/useThreadRouteTarget";
 import { observeResize } from "~/lib/observeResize";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
@@ -233,6 +241,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
+  const board = useBoardEntry(useThreadRouteRef());
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -296,6 +305,16 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               icon={<IssueGlyph.issue />}
               label={gt("Issues", { $context: "sidebar link to the list of issues" })}
               onClick={handleIssuesClick}
+            />
+          ) : null}
+          {board.visible ? (
+            <SidebarUtilityItem
+              icon={<MessagesSquareIcon />}
+              label={gt("Board", { $context: "sidebar button that opens rstack-board" })}
+              onClick={() => {
+                closeMobileSidebar();
+                void board.open();
+              }}
             />
           ) : null}
           <SidebarUtilityItem

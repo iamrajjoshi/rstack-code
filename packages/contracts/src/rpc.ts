@@ -438,7 +438,7 @@ import {
   SourceControlSignInResult,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
-import { BoardStatus } from "./board.ts";
+import { BoardOpenError, BoardOpenInput, BoardOpenResult, BoardStatus } from "./board.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
@@ -579,6 +579,7 @@ export const WS_METHODS = {
   serverGetUsageSummary: "server.getUsageSummary",
   serverRefreshUsageRates: "server.refreshUsageRates",
   boardStatus: "board.status",
+  boardOpen: "board.open",
 
   scheduledTasksSubscribe: "scheduledTasks.subscribe",
   scheduledTasksUpsert: "scheduledTasks.upsert",
@@ -1059,6 +1060,12 @@ const WsBoardStatusRpc = Rpc.make(WS_METHODS.boardStatus, {
   payload: Schema.Struct({}),
   success: BoardStatus,
   error: EnvironmentAuthorizationError,
+});
+
+const WsBoardOpenRpc = Rpc.make(WS_METHODS.boardOpen, {
+  payload: BoardOpenInput,
+  success: BoardOpenResult,
+  error: Schema.Union([BoardOpenError, EnvironmentAuthorizationError]),
 });
 
 const WsServerListTextGeneratorModelsRpc = Rpc.make(WS_METHODS.serverListTextGeneratorModels, {
@@ -2335,6 +2342,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRetryResourceTelemetryRpc,
   WsServerCheckOtlpEndpointRpc,
   WsBoardStatusRpc,
+  WsBoardOpenRpc,
   WsServerListTextGeneratorModelsRpc,
   WsServerPrepareTriageRpc,
   WsServerGetUsageSummaryRpc,

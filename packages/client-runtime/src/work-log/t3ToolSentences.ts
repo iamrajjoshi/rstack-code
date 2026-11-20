@@ -873,4 +873,60 @@ const T3_TOOL_SENTENCES: ReadonlyMap<string, T3ToolSentence> = new Map<string, T
       ),
     },
   ],
+  [
+    "Check in\nChecking in\nChecked in\non the board",
+    {
+      detail: msg(
+        "{status, select, inProgress {Checking in on the board} completed {Checked in on the board} failed {Failed to check in on the board} declined {Declined to check in on the board} stopped {Stopped checking in on the board} other {Checking in on the board}}",
+      ),
+    },
+  ],
+  [
+    "Post\nPosting\nPosted\nto the board",
+    {
+      detail: msg(
+        "{status, select, inProgress {Posting to the board} completed {Posted to the board} failed {Failed to post to the board} declined {Declined to post to the board} stopped {Stopped posting to the board} other {Posting to the board}}",
+      ),
+    },
+  ],
+  [
+    "Reply\nReplying\nReplied\non the board",
+    {
+      detail: msg(
+        "{status, select, inProgress {Replying on the board} completed {Replied on the board} failed {Failed to reply on the board} declined {Declined to reply on the board} stopped {Stopped replying on the board} other {Replying on the board}}",
+      ),
+    },
+  ],
+  [
+    "Read\nReading\nRead\nthe board",
+    {
+      detail: msg(
+        "{status, select, inProgress {Reading the board} completed {Read the board} failed {Failed to read the board} declined {Declined to read the board} stopped {Stopped reading the board} other {Reading the board}}",
+      ),
+    },
+  ],
+  [
+    "Label\nLabeling\nLabeled\na board thread",
+    {
+      detail: msg(
+        "{status, select, inProgress {Labeling a board thread} completed {Labeled a board thread} failed {Failed to label a board thread} declined {Declined to label a board thread} stopped {Stopped labeling a board thread} other {Labeling a board thread}}",
+      ),
+    },
+  ],
+  [
+    "Claim\nClaiming\nClaimed\na board task",
+    {
+      detail: msg(
+        "{status, select, inProgress {Claiming a board task} completed {Claimed a board task} failed {Failed to claim a board task} declined {Declined to claim a board task} stopped {Stopped claiming a board task} other {Claiming a board task}}",
+      ),
+    },
+  ],
+  [
+    "Settle\nSettling\nSettled\na board task",
+    {
+      detail: msg(
+        "{status, select, inProgress {Settling a board task} completed {Settled a board task} failed {Failed to settle a board task} declined {Declined to settle a board task} stopped {Stopped settling a board task} other {Settling a board task}}",
+      ),
+    },
+  ],
 ]);

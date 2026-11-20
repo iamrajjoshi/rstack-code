@@ -1599,6 +1599,10 @@ export const ServerSettings = Schema.Struct({
   boardChannel: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   /** Post as a handle derived from the calling thread, under its coordinator. */
   boardAutoIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** The person's board replies on a thread's board threads reach that thread as messages. */
+  boardDeliverReplies: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** The server checks coordinator workers in on the board when they start, wait and finish. */
+  boardAutoStatus: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 
   pullRequestMergeMethod: Schema.NullOr(PullRequestMergeMethod).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -2002,6 +2006,8 @@ export const ServerSettingsPatch = Schema.Struct({
   boardCliPath: Schema.optionalKey(TrimmedString),
   boardChannel: Schema.optionalKey(TrimmedString),
   boardAutoIdentity: Schema.optionalKey(Schema.Boolean),
+  boardDeliverReplies: Schema.optionalKey(Schema.Boolean),
+  boardAutoStatus: Schema.optionalKey(Schema.Boolean),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
   observability: Schema.optionalKey(
     Schema.Struct({

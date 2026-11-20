@@ -1905,6 +1905,10 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.boardStatus,
       concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
     }),
+    boardOpen: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:open",
+      tag: WS_METHODS.boardOpen,
+    }),
     listTextGeneratorModels: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:list-text-generator-models",
       tag: WS_METHODS.serverListTextGeneratorModels,

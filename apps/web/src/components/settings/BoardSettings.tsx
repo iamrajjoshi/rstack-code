@@ -34,6 +34,8 @@ export function BoardSettings() {
   const mixedCliPath = useScopedSettingsMixed(["boardCliPath"]);
   const mixedChannel = useScopedSettingsMixed(["boardChannel"]);
   const mixedIdentity = useScopedSettingsMixed(["boardAutoIdentity"]);
+  const mixedReplies = useScopedSettingsMixed(["boardDeliverReplies"]);
+  const mixedAutoStatus = useScopedSettingsMixed(["boardAutoStatus"]);
   const cliPathEdited = useRef(false);
   const channelEdited = useRef(false);
   const canCheck = useAtomValue(serverEnvironment.boardStatus.permissionAtom(environmentId));
@@ -230,6 +232,54 @@ export function BoardSettings() {
             checked={!mixedIdentity && settings.boardAutoIdentity}
             onCheckedChange={(checked) => updateSettings({ boardAutoIdentity: checked })}
             aria-label={gt("Automatic board identity")}
+          />
+        }
+      />
+      <SettingsRow
+        serverScoped
+        settingKeys={["boardDeliverReplies"]}
+        mixed={mixedReplies}
+        {...setting("board-deliver-replies")}
+        description={gt(
+          "Send your replies on a thread's board threads, and your approve, hold and release, to that thread as messages. Agents' board posts are never sent.",
+        )}
+        resetAction={
+          mixedReplies || settings.boardDeliverReplies !== defaults.boardDeliverReplies ? (
+            <SettingResetButton
+              ariaLabel={gt("Reset board replies to threads to default")}
+              onClick={() => updateSettings({ boardDeliverReplies: defaults.boardDeliverReplies })}
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={!mixedReplies && settings.boardDeliverReplies}
+            onCheckedChange={(checked) => updateSettings({ boardDeliverReplies: checked })}
+            aria-label={gt("Board replies to threads")}
+          />
+        }
+      />
+      <SettingsRow
+        serverScoped
+        settingKeys={["boardAutoStatus"]}
+        mixed={mixedAutoStatus}
+        {...setting("board-auto-status")}
+        description={gt(
+          "Check a coordinator's workers in on the board when they start, wait on you, and finish or fail, even when their agents forget to.",
+        )}
+        resetAction={
+          mixedAutoStatus || settings.boardAutoStatus !== defaults.boardAutoStatus ? (
+            <SettingResetButton
+              ariaLabel={gt("Reset automatic board status to default")}
+              onClick={() => updateSettings({ boardAutoStatus: defaults.boardAutoStatus })}
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={!mixedAutoStatus && settings.boardAutoStatus}
+            onCheckedChange={(checked) => updateSettings({ boardAutoStatus: checked })}
+            aria-label={gt("Automatic board status")}
           />
         }
       />
