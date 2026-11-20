@@ -219,7 +219,8 @@ export const EnvironmentIdentificationMode = Schema.Literals([
   "none",
 ]);
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
-export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
+// rstack-code: a plain header by default; the channel artwork stays available in Appearance.
+export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "pill";
 
 export const SnapShotKeyChord = KeybindingShortcut.check(
   Schema.makeFilter(
