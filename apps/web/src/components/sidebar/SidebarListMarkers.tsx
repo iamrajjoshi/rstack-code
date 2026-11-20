@@ -157,6 +157,7 @@ export function SidebarGroupHeader(props: {
   toggle: { expanded: boolean; onToggle: () => void };
   onNewThread?: () => void;
   newThreadLabel?: string;
+  isDropTarget?: boolean;
 }) {
   const group = props.marker === "coordinators-header" ? "coordinators" : "threads";
   const rowId = `group:${group}`;
@@ -170,6 +171,7 @@ export function SidebarGroupHeader(props: {
         data-sidebar-row={rowId}
         onClick={props.toggle.onToggle}
         expanded={props.toggle.expanded}
+        tone={props.isDropTarget ? "accent" : "muted"}
         data-testid={`sidebar-${group}-group-toggle`}
         accessory={
           <span

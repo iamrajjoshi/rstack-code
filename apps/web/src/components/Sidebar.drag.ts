@@ -2,8 +2,11 @@ import { closestCenter, type CollisionDetection, type Modifier } from "@dnd-kit/
 import { verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import {
   resolveSidebarDropTarget,
+  scopeSidebarActiveDropToGroup,
+  sidebarGroupHeaderMarker,
   sidebarListItemId,
   sidebarMarkerId,
+  type SidebarActiveGroups,
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
@@ -98,8 +101,8 @@ export function createSidebarSortingStrategy(input: {
   settledVisibleCount?: number;
   routeThreadKey?: string | null;
   snoozedThreadCount?: number;
-  /** Set while coordinator groups show: the coordinator rows lead the active section. */
-  coordinatorKeys?: ReadonlySet<string> | null;
+  /** Set while the active list shows headed groups (sections, coordinators, threads). */
+  groups?: SidebarActiveGroups | null;
   cardHeight?: number;
   slimHeight?: number;
   boundaryLabelHeight?: number;
@@ -170,14 +173,23 @@ export function createSidebarSortingStrategy(input: {
     groups.settled = visible.map((key) => ({ kind: "thread", key, section: "settled" }));
     const projected: SidebarListItem[] = [];
     const marker = (name: SidebarListMarker) => projected.push({ kind: "marker", marker: name });
-    const coordinatorKeys = input.coordinatorKeys;
+    const activeGroups = input.groups;
     const section = (name: "active" | "settled") => {
-      if (name === "active" && coordinatorKeys) {
+      if (name === "active" && activeGroups) {
+        // The dragged row previews in the group the drop puts it in.
+        const dropGroup = scopeSidebarActiveDropToGroup({
+          target,
+          activeOrder: [],
+          activeKey: active.key,
+          groups: activeGroups,
+        }).group;
+        const groupOf = (key: string) =>
+          key === active.key && dropGroup !== null ? dropGroup : activeGroups.groupOf.get(key);
         if (groups.active.length === 0) marker("active-placeholder");
-        marker("coordinators-header");
-        projected.push(...groups.active.filter((item) => coordinatorKeys.has(item.key)));
-        marker("threads-header");
-        projected.push(...groups.active.filter((item) => !coordinatorKeys.has(item.key)));
+        for (const group of activeGroups.order) {
+          marker(sidebarGroupHeaderMarker(group));
+          projected.push(...groups.active.filter((item) => groupOf(item.key) === group));
+        }
         return;
       }
       if (groups[name].length > 0) projected.push(...groups[name]);

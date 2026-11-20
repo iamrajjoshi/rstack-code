@@ -23,6 +23,9 @@ import { useNowMinute } from "../hooks/useNowMinute";
 import { __setClientSettingsForTests, getClientSettings } from "../hooks/useSettings";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
 import { useProjects, useServerConfigs, useQuietThreadShells } from "../state/entities";
+import { useConnectedEnvironmentIds } from "../state/environments";
+import { AsyncResult } from "effect/reactivity";
+import { moveThreadToSidebarSection } from "./sidebar/sidebarSectionActions";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
@@ -45,6 +48,8 @@ vi.mock("./sidebar/SidebarThreadRow", { spy: true });
 vi.mock("../state/session", { spy: true });
 vi.mock("../state/use-orchestration-command", { spy: true });
 vi.mock("../localApi", { spy: true });
+vi.mock("./sidebar/sidebarSectionActions", { spy: true });
+vi.mock("../state/environments", { spy: true });
 vi.mock(import("../state/server"), async (original) => {
   const { Atom } = await import("effect/reactivity");
   const { compileResolvedKeybindingsConfig } = await import("@t3tools/shared/keybindings");
@@ -359,6 +364,105 @@ describe("sidebar coordinator groups", () => {
   });
 });
 
+describe("sidebar sections", () => {
+  it("lists a section above Threads and moves a thread dragged under its header into it", async () => {
+    using stack = new DisposableStack();
+    const previousSettings = getClientSettings();
+    stack.defer(() => __setClientSettingsForTests(previousSettings));
+    // The time-ordered Working list would leave nothing to reorder; sections still move.
+    __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, sidebarWorkingShelfEnabled: false });
+    const activeProject = project("active");
+    const first = { ...threadShell(activeProject.id, 0), sectionId: "review" };
+    const second = threadShell(activeProject.id, 1);
+    const threadRef = { environmentId: activeProject.environmentId, threadId: first.id };
+    vi.mocked(readEnvironmentScope).mockReturnValue(true);
+    vi.mocked(useEnvironmentScope).mockReturnValue(true);
+    vi.mocked(useProjects).mockReturnValue([activeProject]);
+    vi.mocked(useQuietThreadShells).mockReturnValue([first, second]);
+    vi.mocked(useConnectedEnvironmentIds).mockReturnValue([activeProject.environmentId]);
+    stack.defer(() => vi.mocked(useConnectedEnvironmentIds).mockReset());
+    vi.mocked(useServerConfigs).mockReturnValue(
+      new Map([
+        [
+          activeProject.environmentId,
+          {
+            scratchWorkspaceRoot: null,
+            shellThreadFamilies: false,
+            environment: { capabilities: {} },
+            settings: { sidebarSections: [{ id: "review", name: "Review" }] },
+          } as unknown as EnvironmentServerConfig,
+        ],
+      ]),
+    );
+    const move = vi
+      .mocked(moveThreadToSidebarSection)
+      .mockResolvedValue(AsyncResult.success(undefined));
+    stack.defer(() => move.mockReset());
+    vi.mocked(useThreadRouteTarget).mockReturnValue({ kind: "server", threadRef });
+    vi.mocked(useHandleNewThread).mockReturnValue({
+      activeDraftThread: null,
+      activeThread: null,
+      defaultProjectRef: {
+        environmentId: activeProject.environmentId,
+        projectId: activeProject.id,
+      },
+      defaultProjectFallbackReady: true,
+      handleNewThread: vi.fn().mockResolvedValue(null),
+      routeDraftId: null,
+      routeThreadRef: threadRef,
+    });
+    await using screen = await render(
+      <SidebarProvider>
+        <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
+      </SidebarProvider>,
+    );
+    await expect.element(screen.getByTestId("sidebar-section-toggle-review")).toBeVisible();
+    const rowOrder = () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[data-sidebar-row]"), (row) => {
+        const id = row.dataset.sidebarRow ?? "";
+        return id.endsWith(first.id) ? "first" : id.endsWith(second.id) ? "second" : id;
+      }).filter((id) => id === "first" || id === "second" || id.includes(":"));
+    expect(rowOrder()).toEqual(
+      expect.arrayContaining(["section:review", "first", "group:threads", "second"]),
+    );
+    expect(rowOrder().indexOf("first")).toBeLessThan(rowOrder().indexOf("group:threads"));
+
+    const rowOf = (thread: EnvironmentThreadShell) =>
+      document.querySelector<HTMLElement>(
+        `li[data-thread-item="${thread.environmentId}:${thread.id}"]`,
+      )!;
+    const from = rowOf(second).getBoundingClientRect();
+    const to = rowOf(first).getBoundingClientRect();
+    const pointer = (type: string, y: number) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX: from.x + 40,
+        clientY: y,
+      });
+    const handle = rowOf(second).querySelector<HTMLElement>("[data-sidebar-row]")!;
+    await act(() => handle.dispatchEvent(pointer("pointerdown", from.y + 10)));
+    for (const y of [from.y, to.y + to.height / 2, to.y + 4]) {
+      await act(() => document.dispatchEvent(pointer("pointermove", y)));
+    }
+    await act(() => document.dispatchEvent(pointer("pointerup", to.y + 4)));
+    // A finished drag swallows the document's next click until another press.
+    stack.defer(() => document.dispatchEvent(pointer("pointerdown", -100)));
+    await vi.waitFor(() =>
+      expect(move).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadRef: { environmentId: second.environmentId, threadId: second.id },
+          section: expect.objectContaining({ id: "review" }),
+        }),
+      ),
+    );
+  });
+});
+
 describe("sidebar settled pagination", () => {
   it("keeps the viewport in place when showing more settled threads", async () => {
     using stack = new DisposableStack();
@@ -414,6 +518,7 @@ describe("sidebar settled pagination", () => {
           {
             scratchWorkspaceRoot: null,
             shellThreadFamilies: false,
+            settings: { sidebarSections: [] },
           } as unknown as EnvironmentServerConfig,
         ],
       ]),

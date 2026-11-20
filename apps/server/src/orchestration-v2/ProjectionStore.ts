@@ -1062,6 +1062,7 @@ export function applyToProjection(
       };
     // Reordering and PR refreshes preserve the orchestrator's activity timestamp.
     case "thread.active-reordered":
+    case "thread.section-set":
     case "thread.tags-updated":
     case "thread.pull-request-synced":
     case "thread.issue-synced":
@@ -1996,6 +1997,7 @@ export function threadShellFromProjection(
     titleRegeneration: projection.thread.titleRegeneration ?? null,
     lastTitleRegeneration: projection.thread.lastTitleRegeneration ?? null,
     ...(projection.thread.coordinator === true ? { coordinator: true } : {}),
+    ...(projection.thread.sectionId ? { sectionId: projection.thread.sectionId } : {}),
     limitRecovery: projection.thread.limitRecovery ?? null,
     deletedAt: projection.thread.deletedAt,
   };
@@ -2295,6 +2297,7 @@ function shellFromState(input: {
     titleRegeneration: input.state.thread.titleRegeneration ?? null,
     lastTitleRegeneration: input.state.thread.lastTitleRegeneration ?? null,
     ...(input.state.thread.coordinator === true ? { coordinator: true } : {}),
+    ...(input.state.thread.sectionId ? { sectionId: input.state.thread.sectionId } : {}),
     limitRecovery: input.state.thread.limitRecovery ?? null,
     deletedAt: input.state.thread.deletedAt,
   };
@@ -2481,6 +2484,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             case "thread.unpinned":
             case "thread.pin-reordered":
             case "thread.active-reordered":
+            case "thread.section-set":
             case "thread.tags-updated":
             case "thread.visited":
             case "thread.marked-unread":
@@ -3322,6 +3326,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             event.type !== "thread.unpinned" &&
             event.type !== "thread.pin-reordered" &&
             event.type !== "thread.active-reordered" &&
+            event.type !== "thread.section-set" &&
             event.type !== "thread.tags-updated" &&
             event.type !== "thread.visited" &&
             event.type !== "thread.visit-recorded" &&

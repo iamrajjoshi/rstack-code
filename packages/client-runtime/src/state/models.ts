@@ -209,6 +209,8 @@ export interface EnvironmentThreadShell {
   readonly titleRegeneration?: { readonly requestId: string; readonly startedAt: string } | null;
   /** The thread delegates implementation to worker threads. */
   readonly coordinator?: boolean;
+  /** The user's sidebar section, an id from the environment's `sidebarSections` setting. */
+  readonly sectionId?: string;
   readonly deletedAt: string | null;
   readonly source: OrchestrationV2ThreadShell;
 }
@@ -365,6 +367,7 @@ export function presentThreadShell(
             startedAt: iso(thread.titleRegeneration.startedAt),
           },
     ...(thread.coordinator === true ? { coordinator: true } : {}),
+    ...(thread.sectionId ? { sectionId: thread.sectionId } : {}),
     deletedAt: nullableIso(thread.deletedAt),
     source: thread,
   };

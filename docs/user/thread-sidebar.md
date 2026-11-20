@@ -172,6 +172,27 @@ keep their places and hold both kinds. Worker threads stay nested under their co
 the project-grouped sidebar, coordinators come first in each folder instead. Turn the groups off
 with **Settings → General → Group coordinators**. Each device keeps its own choice.
 
+### Sections
+
+On web and desktop, make your own sections to organize threads. Use the **New section** button
+next to the sidebar's filter, or **Move to section → New section…** in a thread's menu. A new
+section starts in rename mode; type a name and press Enter.
+
+Sections sit below Pinned and above Coordinators and Threads, in your order. Drag a thread under a
+section's header to move it in, or use **Move to section** in its menu; drop it under **Threads**
+or choose **Remove from section** to take it out. Drag within a section to reorder it. Click a
+header to fold it; a folded section shows its count and a dot when a thread inside needs you.
+Right-click a header to rename, move it up or down, or delete it. Drag a header to reorder
+sections. Deleting a section moves its threads back to **Threads** and asks first if it has any.
+
+A thread remembers its section while it is pinned, working, snoozed, or settled, and shows in
+those places as usual; it returns to its section when it comes back to the active list. A
+coordinator keeps its workers nested under it inside a section. Sections and their threads are
+saved on each machine and appear on your other devices. With threads from several machines, a
+section shows them all; moving a thread into a section adds that section to the thread's machine.
+Folding is kept per device. The project-grouped sidebar and the mobile app show threads in their
+usual places and keep their sections for later.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

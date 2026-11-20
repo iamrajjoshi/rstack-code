@@ -647,6 +647,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.unpin":
     case "thread.pin.reorder":
     case "thread.active.reorder":
+    case "thread.section.set":
     case "thread.tag.set":
     case "thread.visit":
     case "thread.mark-unread":
@@ -4346,6 +4347,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           | "thread.pin.reorder"
           | "thread.tag.set"
           | "thread.active.reorder"
+          | "thread.section.set"
           | "thread.mark-unread"
           | "thread.metadata.update"
           | "thread.pull-request.link"
@@ -4508,6 +4510,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         command.type === "thread.unpin" ||
         command.type === "thread.pin.reorder" ||
         command.type === "thread.active.reorder" ||
+        command.type === "thread.section.set" ||
         command.type === "thread.pull-request.sync") &&
       thread.archivedAt !== null
     ) {
@@ -5024,6 +5027,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             updatedAt: thread.updatedAt,
           };
         }
+        // Membership is arrangement, not activity; it survives pin, settle and snooze.
+        case "thread.section.set": {
+          return {
+            ...thread,
+            sectionId: command.sectionId,
+            updatedAt: thread.updatedAt,
+          };
+        }
         case "thread.tag.set": {
           const current = thread.tags ?? [];
           return {
@@ -5494,6 +5505,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           return "thread.pin-reordered" as const;
         case "thread.active.reorder":
           return "thread.active-reordered" as const;
+        case "thread.section.set":
+          return "thread.section-set" as const;
         case "thread.tag.set":
           return "thread.tags-updated" as const;
         case "thread.mark-unread":
@@ -15600,6 +15613,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.unpin":
       case "thread.pin.reorder":
       case "thread.active.reorder":
+      case "thread.section.set":
       case "thread.tag.set":
       case "thread.mark-unread":
       case "thread.pull-request.link":

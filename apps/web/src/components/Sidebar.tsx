@@ -16,10 +16,12 @@ import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import {
+  closestCenter,
   DndContext,
   useSensor,
   useSensors,
   type AutoScrollOptions,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -198,7 +200,7 @@ import {
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
   scopeSidebarActiveDropToGroup,
-  splitSidebarCoordinatorThreads,
+  type SidebarActiveGroups,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
   resolveSidebarSweepKeys,
@@ -218,9 +220,35 @@ import {
   useSnoozeWakeClock,
   threadShortcutContext,
   useThreadJumpHintsVisible,
+  sidebarGroupHeaderMarker,
+  sidebarMarkerId,
+  type SidebarDropTarget,
+  type SidebarDropVerb,
   type SidebarListItem,
   type SidebarSection,
 } from "./Sidebar.logic";
+import {
+  groupSidebarActiveThreads,
+  mergeSidebarSections,
+  moveSidebarSectionIds,
+  resolveSidebarThreadSectionId,
+  sectionIdOfSidebarGroup,
+  SIDEBAR_SECTION_HEADER_PREFIX,
+  sidebarSectionGroupId,
+  stepSidebarSectionIds,
+  type SidebarSectionView,
+} from "./sidebar/SidebarSections.logic";
+import {
+  createSidebarSection,
+  deleteSidebarSection,
+  moveThreadToSidebarSection,
+  renameSidebarSection,
+  reorderSidebarSections,
+} from "./sidebar/sidebarSectionActions";
+import {
+  SidebarCustomSectionHeader,
+  sidebarSectionRowId,
+} from "./sidebar/SidebarCustomSectionHeader";
 import {
   createSidebarCollisionDetection,
   createSidebarSortingStrategy,
@@ -352,6 +380,14 @@ const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
 const COORDINATOR_GROUP_COLLAPSED_KEY = "t3code:sidebar:coordinators-collapsed";
 const THREAD_GROUP_COLLAPSED_KEY = "t3code:sidebar:threads-collapsed";
+const SECTIONS_COLLAPSED_KEY = "t3code:sidebar:sections-collapsed";
+const SectionsCollapsedSchema = Schema.Record(Schema.String, Schema.Boolean);
+const SECTION_HEADER_ID_PREFIX = sidebarMarkerId(SIDEBAR_SECTION_HEADER_PREFIX);
+
+/** The section a dragged or hovered header id names, or null for any other sortable. */
+function sectionIdOfHeaderId(id: string): string | null {
+  return id.startsWith(SECTION_HEADER_ID_PREFIX) ? id.slice(SECTION_HEADER_ID_PREFIX.length) : null;
+}
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -364,6 +400,8 @@ type SidebarOptimisticDrop = {
   readonly order: readonly string[] | null;
   readonly keysAtDrop: ReadonlyMap<string, string | null>;
   readonly assignedKeys: ReadonlyMap<string, string>;
+  /** Set when the drop moves the thread into a section (an id) or out of one (null). */
+  readonly sectionId?: string | null;
 };
 
 interface SidebarThreadPartitionInput {
@@ -423,6 +461,14 @@ function resolveDraggedOrders(input: {
   };
 }
 
+function withSectionId(
+  thread: EnvironmentThreadShell,
+  sectionId: string | null,
+): EnvironmentThreadShell {
+  const { sectionId: _previous, ...rest } = thread;
+  return sectionId === null ? rest : { ...rest, sectionId };
+}
+
 function routeThreadOnly(
   threads: readonly EnvironmentThreadShell[],
   routeThreadKey: string | null,
@@ -446,6 +492,8 @@ function useSidebarThreads(input: {
   readonly folderGroups: readonly SidebarProjectSnapshot[] | null;
   // Keeps folders with no active threads, so a project the user filtered to or pinned can start one.
   readonly keepEmptyFolders: (group: SidebarProjectSnapshot) => boolean;
+  // The user's sections, merged across environments; shown only outside boring mode.
+  readonly sections: readonly SidebarSectionView[];
 }) {
   const {
     projectScopeKey,
@@ -458,6 +506,7 @@ function useSidebarThreads(input: {
     routeRowThreadKey,
     folderGroups,
     keepEmptyFolders: keepEmpty,
+    sections,
   } = input;
   // Folders already separate the work, so boring mode has no Working shelf.
   const workingShelfEnabled =
@@ -495,6 +544,12 @@ function useSidebarThreads(input: {
     false,
     Schema.Boolean,
   );
+  // Folding is a per-device view choice, like the shelves; the sections themselves sync.
+  const [sectionCollapsedById, setSectionCollapsedById] = useLocalStorage(
+    SECTIONS_COLLAPSED_KEY,
+    {},
+    SectionsCollapsedSchema,
+  );
   // Shared with the old per-project sidebar, so folders keep their open state.
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
@@ -521,33 +576,71 @@ function useSidebarThreads(input: {
   });
 
   const { pinnedThreads, workingThreads, snoozedThreads, settledThreads } = partition;
-  const activeSplit = coordinatorGroupsEnabled
-    ? splitSidebarCoordinatorThreads(partition.activeThreads)
-    : null;
-  const hasActiveCoordinators = activeSplit !== null && activeSplit.coordinators.length > 0;
-  // Coordinators lead the active list; boring mode keeps that order inside each folder.
-  const activeThreads = hasActiveCoordinators
-    ? [...activeSplit.coordinators, ...activeSplit.others]
-    : partition.activeThreads;
-  const coordinatorGroups =
-    hasActiveCoordinators && folderGroups === null
-      ? {
-          coordinators: activeSplit.coordinators,
-          others: activeSplit.others,
-          coordinatorsCollapsed: coordinatorGroupCollapsed,
-          othersCollapsed: threadGroupCollapsed,
-          visibleCoordinators: coordinatorGroupCollapsed
-            ? routeThreadOnly(activeSplit.coordinators, routeRowThreadKey)
-            : activeSplit.coordinators,
-          visibleOthers: threadGroupCollapsed
-            ? routeThreadOnly(activeSplit.others, routeRowThreadKey)
-            : activeSplit.others,
-          coordinatorKeys: new Set(
-            partition.visibleThreads.flatMap((thread) =>
-              thread.coordinator === true ? [threadShellKey(thread)] : [],
-            ),
-          ),
-        }
+  // Boring mode keeps sections out: folders already arrange the work, and membership is kept.
+  const grouped = groupSidebarActiveThreads({
+    threads: partition.activeThreads,
+    sections: folderGroups === null ? sections : [],
+    coordinatorGroupsEnabled,
+    filtered: scopedProjectKeys !== null,
+  });
+  const hasActiveCoordinators = coordinatorGroupsEnabled && grouped.coordinators.length > 0;
+  // Sections lead the active list, then coordinators; boring mode keeps coordinators first in folders.
+  const activeThreads =
+    grouped.sections.length > 0 || hasActiveCoordinators
+      ? [
+          ...grouped.sections.flatMap((entry) => entry.threads),
+          ...grouped.coordinators,
+          ...grouped.others,
+        ]
+      : partition.activeThreads;
+  const fold = (threads: readonly EnvironmentThreadShell[], collapsed: boolean) =>
+    collapsed ? routeThreadOnly(threads, routeRowThreadKey) : threads;
+  const activeGroups =
+    folderGroups === null && (grouped.sections.length > 0 || hasActiveCoordinators)
+      ? (() => {
+          const groupOf = new Map<string, string>();
+          const order: string[] = [];
+          const sectionGroups = grouped.sections.map(({ section, threads }) => {
+            const group = sidebarSectionGroupId(section.id);
+            order.push(group);
+            for (const thread of threads) groupOf.set(threadShellKey(thread), group);
+            const collapsed = sectionCollapsedById[section.id] === true;
+            return {
+              section,
+              threads,
+              collapsed,
+              visibleThreads: fold(threads, collapsed),
+              hiddenThreads: collapsed
+                ? threads.filter((thread) => threadShellKey(thread) !== routeRowThreadKey)
+                : EMPTY_THREADS,
+            };
+          });
+          if (hasActiveCoordinators) order.push("coordinators");
+          order.push("threads");
+          for (const thread of grouped.coordinators)
+            groupOf.set(threadShellKey(thread), "coordinators");
+          for (const thread of grouped.others) groupOf.set(threadShellKey(thread), "threads");
+          return {
+            sections: sectionGroups,
+            coordinators: hasActiveCoordinators ? grouped.coordinators : null,
+            others: grouped.others,
+            coordinatorsCollapsed: coordinatorGroupCollapsed,
+            othersCollapsed: threadGroupCollapsed,
+            visibleCoordinators: fold(grouped.coordinators, coordinatorGroupCollapsed),
+            visibleOthers: fold(grouped.others, threadGroupCollapsed),
+            model: {
+              order,
+              groupOf,
+              coordinatorKeys: coordinatorGroupsEnabled
+                ? new Set(
+                    partition.visibleThreads.flatMap((thread) =>
+                      thread.coordinator === true ? [threadShellKey(thread)] : [],
+                    ),
+                  )
+                : null,
+            } satisfies SidebarActiveGroups,
+          };
+        })()
       : null;
   // Older settled threads load in pages; the shelf lists them only as far as they are loaded.
   const olderSettledShelf = useOlderSettledShelf({
@@ -605,8 +698,12 @@ function useSidebarThreads(input: {
     ...pinnedThreads,
     ...(projectFolders !== null
       ? projectFolders.flatMap((folder) => folder.threads)
-      : coordinatorGroups !== null
-        ? [...coordinatorGroups.visibleCoordinators, ...coordinatorGroups.visibleOthers]
+      : activeGroups !== null
+        ? [
+            ...activeGroups.sections.flatMap((entry) => entry.visibleThreads),
+            ...activeGroups.visibleCoordinators,
+            ...activeGroups.visibleOthers,
+          ]
         : activeThreads),
     ...visibleWorkingThreads,
     ...visibleSnoozedThreads,
@@ -649,9 +746,14 @@ function useSidebarThreads(input: {
     toggleSnoozedShelf: () => setSnoozedShelfExpanded((value) => !value),
     workingShelfExpanded,
     toggleWorkingShelf: () => setWorkingShelfExpanded((value) => !value),
-    coordinatorGroups,
+    activeGroups,
     toggleCoordinatorGroup: () => setCoordinatorGroupCollapsed((value) => !value),
     toggleThreadGroup: () => setThreadGroupCollapsed((value) => !value),
+    toggleSection: (sectionId: string) =>
+      setSectionCollapsedById((current) => ({
+        ...current,
+        [sectionId]: current[sectionId] !== true,
+      })),
     projectFolders,
     toggleProjectFolder: (group: SidebarProjectSnapshot) => {
       const keys = sidebarFolderExpansionKeys(group);
@@ -708,12 +810,16 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     const configLoaded = serverConfigs.has(thread.environmentId);
     const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
     if (optimisticDrop?.key === threadKey) {
-      const projected = applySidebarThreadDrop(
+      const dropped = applySidebarThreadDrop(
         thread,
         optimisticDrop.section,
         optimisticDrop.occurredAt,
         optimisticDrop.assignedKeys.get(threadKey),
       );
+      const projected =
+        optimisticDrop.sectionId === undefined
+          ? dropped
+          : withSectionId(dropped, optimisticDrop.sectionId);
       (optimisticDrop.section === "pinned"
         ? pinned
         : optimisticDrop.section === "settled"
@@ -825,6 +931,13 @@ function isOptimisticDropReleased(input: {
     canonicalSection !== optimisticDrop.section
   ) {
     return true;
+  }
+  // Hold a section move until the server reports the new membership.
+  if (
+    optimisticDrop.sectionId !== undefined &&
+    (thread.sectionId ?? null) !== optimisticDrop.sectionId
+  ) {
+    return false;
   }
   if (optimisticDrop.order === null) {
     // Settle emits unpin/unsnooze too; hold projected fields and sort times until the whole move completes.
@@ -1114,10 +1227,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     readonly occurredAt: string;
     readonly activationY: number | null;
     readonly targetSection: SidebarSection | null;
+    /** The headed active group the drop lands in, while groups show. */
+    readonly targetGroup: string | null;
     readonly contextDrag: boolean;
+  } | null>(null);
+  // A section header being dragged to reorder sections, and the section it is over.
+  const [sectionDrag, setSectionDrag] = useState<{
+    readonly sectionId: string;
+    readonly overSectionId: string | null;
   } | null>(null);
   const dragSensorRef = useRef<SidebarPointerSensor | null>(null);
   const contextDragKeyRef = useRef<string | null>(null);
+  const sectionDragActiveRef = useRef(false);
   const dragScrollRef = useRef<{ readonly viewport: Element; readonly top: number } | null>(null);
   const [actionSweep, setActionSweep] = useState<{
     action: SidebarSweepAction;
@@ -1372,6 +1493,20 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     },
   );
 
+  // The primary lists first, so its order and names win where environments disagree.
+  const sections = mergeSidebarSections(
+    [...serverConfigs]
+      .toSorted(([left], [right]) =>
+        left === primaryEnvironmentId ? -1 : right === primaryEnvironmentId ? 1 : 0,
+      )
+      .map(([environmentId, config]) => ({
+        environmentId,
+        sections: config.settings.sidebarSections,
+      })),
+  );
+  const sectionById = new Map(sections.map((section) => [section.id, section] as const));
+  const sectionIds = new Set(sectionById.keys());
+
   const {
     workingShelfEnabled,
     pinnedThreads,
@@ -1394,9 +1529,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     toggleSnoozedShelf,
     workingShelfExpanded,
     toggleWorkingShelf,
-    coordinatorGroups,
+    activeGroups,
     toggleCoordinatorGroup,
     toggleThreadGroup,
+    toggleSection,
     projectFolders,
     toggleProjectFolder,
     renderedSettledThreads,
@@ -1428,7 +1564,135 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       : null,
     keepEmptyFolders: (group) =>
       scopedProjectGroups.length > 0 || (group.pinned && !group.archived),
+    sections,
   });
+  const sectionEntryById = new Map(
+    (activeGroups?.sections ?? []).map((entry) => [entry.section.id, entry] as const),
+  );
+  const [renamingSectionId, setRenamingSectionId] = useState<string | null>(null);
+  const reportSectionFailure = (result: AtomCommandResult<unknown, unknown>, title: string) => {
+    if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title,
+        description:
+          thrownErrorMessage(squashAtomCommandFailure(result), m) ?? gt("An error occurred."),
+      }),
+    );
+  };
+  const moveThreadToSection = (threadRef: ScopedThreadRef, section: SidebarSectionView | null) => {
+    void moveThreadToSidebarSection({
+      threadRef,
+      section,
+      orderedIds: sections.map((entry) => entry.id),
+    }).then((result) => reportSectionFailure(result, gt("Failed to move thread")));
+  };
+  // A new section starts named and in rename mode, like a new folder in a file manager.
+  const startNewSection = (environmentId: EnvironmentId, threadRef?: ScopedThreadRef) => {
+    void (async () => {
+      const { result, id } = await createSidebarSection(environmentId, gt("New section"));
+      if (result._tag === "Failure") {
+        reportSectionFailure(result, gt("Failed to create section"));
+        return;
+      }
+      if (threadRef) {
+        const moved = await moveThreadToSidebarSection({
+          threadRef,
+          section: { id, name: gt("New section"), environmentIds: [environmentId] },
+          orderedIds: [],
+        });
+        reportSectionFailure(moved, gt("Failed to move thread"));
+      }
+      setRenamingSectionId(id);
+    })();
+  };
+  // Prefers the primary, then any connected environment this device can write settings to.
+  const newSectionEnvironmentId =
+    [primaryEnvironmentId, ...connectedEnvironmentIds].find(
+      (environmentId): environmentId is EnvironmentId =>
+        environmentId != null &&
+        connectedEnvironmentIds.includes(environmentId) &&
+        serverConfigs.has(environmentId),
+    ) ?? null;
+  const finishSectionRename = useStableCallback((sectionId: string, name: string | null) => {
+    setRenamingSectionId(null);
+    const section = sectionById.get(sectionId);
+    if (name === null || section === undefined) return;
+    void renameSidebarSection(section, name).then((result) =>
+      reportSectionFailure(result, gt("Failed to rename section")),
+    );
+  });
+  const reorderSections = (orderedIds: readonly string[]) => {
+    void reorderSidebarSections(sections, orderedIds).then((result) =>
+      reportSectionFailure(result, gt("Failed to reorder sections")),
+    );
+  };
+  const handleSectionContextMenu = useStableCallback(
+    (sectionId: string, position: { x: number; y: number }, source: ContextMenuSource) => {
+      const api = readLocalApi();
+      const section = sectionById.get(sectionId);
+      if (!api || !section) return;
+      const ids = sections.map((entry) => entry.id);
+      const up = stepSidebarSectionIds(ids, sectionId, -1);
+      const down = stepSidebarSectionIds(ids, sectionId, 1);
+      void (async () => {
+        const clicked = await settlePromise(() =>
+          api.contextMenu.show(
+            [
+              { id: "rename", label: gt("Rename section"), icon: "pencil" },
+              { id: "up", label: gt("Move up"), disabled: up === null },
+              { id: "down", label: gt("Move down"), disabled: down === null },
+              {
+                id: "delete",
+                label: gt("Delete section"),
+                icon: "trash",
+                destructive: true,
+                separatorBefore: true,
+              },
+            ],
+            position,
+            source,
+          ),
+        );
+        if (clicked._tag === "Failure") return;
+        switch (clicked.value) {
+          case "rename":
+            setRenamingSectionId(sectionId);
+            return;
+          case "up":
+            if (up) reorderSections(up);
+            return;
+          case "down":
+            if (down) reorderSections(down);
+            return;
+          case "delete": {
+            // Members anywhere count: pinned, settled and snoozed threads remember their section.
+            const members = threads.filter((thread) => thread.sectionId === sectionId).length;
+            if (members > 0) {
+              const confirmed = await settlePromise(() =>
+                api.dialogs.confirm(
+                  [
+                    gt('Delete section "{section}"?', { section: section.name }),
+                    gt(
+                      "{count, plural, one {Its thread moves back to Threads.} other {Its {count} threads move back to Threads.}}",
+                      { count: members },
+                    ),
+                  ].join("\n"),
+                  { variant: "destructive" },
+                ),
+              );
+              if (confirmed._tag === "Failure" || !confirmed.value) return;
+            }
+            void deleteSidebarSection(section).then((result) =>
+              reportSectionFailure(result, gt("Failed to delete section")),
+            );
+            return;
+          }
+        }
+      })();
+    },
+  );
 
   // Subagents and delegated tasks under a searchable thread match too, without rows of their own.
   const threadByShellKey = isSearchingThreads
@@ -1834,14 +2098,29 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     dragState?.contextDrag === true ||
     dragState?.activeSection === "working";
   const dragTargetSection = isContextDrag ? null : (dragState?.targetSection ?? null);
+  const dragTargetGroup = dragTargetSection === "active" ? (dragState?.targetGroup ?? null) : null;
+  const dragTargetSectionId = sectionIdOfSidebarGroup(dragTargetGroup);
+  const dragTargetSectionName =
+    dragTargetSectionId === null ? null : sectionById.get(dragTargetSectionId)?.name;
+  const dragSourceThread = dragState ? threadByKey.get(dragState.activeKey) : undefined;
+  const dragSectionVerb: SidebarDropVerb | null =
+    dragTargetGroup === null ||
+    dragSourceThread === undefined ||
+    dragTargetSectionId === resolveSidebarThreadSectionId(dragSourceThread, sectionIds)
+      ? null
+      : dragTargetSectionId === null
+        ? "unsection"
+        : "section";
   const finishThreadDrag = (started: boolean) => {
     dragSensorRef.current = null;
     contextDragKeyRef.current = null;
     dragScrollRef.current = null;
+    sectionDragActiveRef.current = false;
     endThreadContextDrag();
     if (started) {
       listMotionRef.current?.release();
       setDragState(null);
+      setSectionDrag(null);
     }
   };
   const attachDragSensor = (sensor: SidebarPointerSensor) => {
@@ -1871,6 +2150,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     if (scroll && scroll.viewport.scrollTop !== scroll.top) scroll.viewport.scrollTop = scroll.top;
   };
   const moveThreadContextDrag = (point: { x: number; y: number }) => {
+    // A section header only reorders sections; it never becomes chat context.
+    if (sectionDragActiveRef.current) return false;
     // Search results cannot reorder, so their context preview starts inside the list.
     const contextDrag = searchResultsListRef.current !== null || pointerOutsideThreadList(point);
     setDragState((current) =>
@@ -1890,7 +2171,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     return true;
   };
   const dropThreadContextDrag = (point: { x: number; y: number }) => {
-    if (!pointerOutsideThreadList(point)) return false;
+    if (sectionDragActiveRef.current || !pointerOutsideThreadList(point)) return false;
     restoreDragScroll();
     dropThreadContext(point, contextDragThreads());
     return true;
@@ -2011,8 +2292,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     })();
   };
 
+  const groupsModel = activeGroups?.model ?? null;
   const handleThreadDragStart = (event: DragStartEvent) => {
     const activeKey = String(event.active.id);
+    const draggedSectionId = sectionIdOfHeaderId(activeKey);
+    if (draggedSectionId !== null) {
+      sectionDragActiveRef.current = true;
+      setSectionDrag({ sectionId: draggedSectionId, overSectionId: null });
+      return;
+    }
     contextDragKeyRef.current = activeKey;
     const activeSection = sectionByThreadKey.get(activeKey);
     if (activeSection === undefined) return;
@@ -2033,6 +2321,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       activeKey,
       activeSection,
       targetSection: activeSection,
+      targetGroup: groupsModel?.groupOf.get(activeKey) ?? null,
       contextDrag: false,
       occurredAt: new Date().toISOString(),
       activationY:
@@ -2040,7 +2329,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     });
   };
   const hasProjectFolders = projectFolders !== null && projectFolders.length > 0;
-  const coordinatorKeys = coordinatorGroups?.coordinatorKeys ?? null;
   const sidebarListItemsFresh = ((): readonly SidebarListItem[] => {
     const rowsOf = (
       list: readonly EnvironmentThreadShell[],
@@ -2053,6 +2341,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     // Boring mode keeps a pinned open project or one the user filtered to, so it can start a thread.
     if (
       !hasProjectFolders &&
+      activeGroups === null &&
       pinnedThreads.length +
         activeThreads.length +
         workingThreads.length +
@@ -2067,13 +2356,22 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     items.push(...pinnedRows);
     items.push({ kind: "marker", marker: "pinned-divider" });
     items.push({ kind: "marker", marker: "active-placeholder" });
-    if (coordinatorGroups === null) {
+    if (activeGroups === null) {
       items.push(...rowsOf(activeThreads, "active"));
     } else {
-      items.push({ kind: "marker", marker: "coordinators-header" });
-      items.push(...rowsOf(coordinatorGroups.visibleCoordinators, "active"));
+      for (const entry of activeGroups.sections) {
+        items.push({
+          kind: "marker",
+          marker: sidebarGroupHeaderMarker(sidebarSectionGroupId(entry.section.id)),
+        });
+        items.push(...rowsOf(entry.visibleThreads, "active"));
+      }
+      if (activeGroups.coordinators !== null) {
+        items.push({ kind: "marker", marker: "coordinators-header" });
+        items.push(...rowsOf(activeGroups.visibleCoordinators, "active"));
+      }
       items.push({ kind: "marker", marker: "threads-header" });
-      items.push(...rowsOf(coordinatorGroups.visibleOthers, "active"));
+      items.push(...rowsOf(activeGroups.visibleOthers, "active"));
     }
     if (workingThreads.length > 0) {
       items.push({ kind: "marker", marker: "working-header" });
@@ -2136,14 +2434,45 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     previousShelfExpansionKeyRef.current = shelfExpansionKey;
     listMotionRef.current?.update(listMotionPass.animate && shelvesUnchanged);
   }, [listMotionPass, shelfExpansionKey]);
+  // Scopes a drop to the group it lands in and says whether it moves the thread between sections.
+  const scopeThreadDrop = useStableCallback(
+    (activeKey: string, unscopedTarget: SidebarDropTarget) => {
+      const scoped = scopeSidebarActiveDropToGroup({
+        target: unscopedTarget,
+        activeOrder: activeKeys,
+        activeKey,
+        groups: groupsModel,
+      });
+      const thread = threadByKey.get(activeKey);
+      const currentSectionId = thread ? resolveSidebarThreadSectionId(thread, sectionIds) : null;
+      const nextSectionId = sectionIdOfSidebarGroup(scoped.group);
+      return {
+        ...scoped,
+        currentSectionId,
+        nextSectionId,
+        sectionChange: scoped.group !== null && nextSectionId !== currentSectionId,
+      };
+    },
+  );
   const handleThreadDragOver = (event: DragOverEvent) => {
-    const target = event.over
-      ? resolveSidebarDropTarget(sidebarListItems, String(event.active.id), String(event.over.id))
-      : null;
+    const overId = event.over ? String(event.over.id) : null;
+    if (sectionDrag !== null) {
+      const overSectionId = overId === null ? null : sectionIdOfHeaderId(overId);
+      setSectionDrag((current) =>
+        current === null || current.overSectionId === overSectionId
+          ? current
+          : { ...current, overSectionId },
+      );
+      return;
+    }
+    const activeKey = String(event.active.id);
+    const target =
+      overId === null ? null : resolveSidebarDropTarget(sidebarListItems, activeKey, overId);
+    const targetGroup = target === null ? null : scopeThreadDrop(activeKey, target).group;
     setDragState((current) =>
-      current === null || current.activeKey !== String(event.active.id)
+      current === null || current.activeKey !== activeKey
         ? current
-        : { ...current, targetSection: target?.section ?? null },
+        : { ...current, targetSection: target?.section ?? null, targetGroup },
     );
   };
   const sortableIds = sidebarListItems.map(sidebarListItemId);
@@ -2160,7 +2489,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         });
   const sidebarSortingStrategy = createSidebarSortingStrategy({
     items: sidebarListItems,
-    enabled: !isContextDrag,
+    // Dragging a section header moves only the header; rows stay put until the drop.
+    enabled: !isContextDrag && sectionDrag === null,
     boundaryLabelHeight: SIDEBAR_DRAG_LABEL_HEIGHT,
     settledOrder: draggedSettledOrder,
     ...(draggedActiveOrder === undefined ? {} : { activeOrder: draggedActiveOrder }),
@@ -2168,12 +2498,22 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     settledVisibleCount,
     routeThreadKey: routeRowThreadKey,
     snoozedThreadCount: snoozedThreads.length,
-    coordinatorKeys,
+    groups: groupsModel,
   });
   const draggedThreadKey = dragState?.activeKey;
   const draggedFromSection = dragState?.activeSection;
   const dragActivationY = dragState?.activationY;
   const dndCollisionDetection = (() => {
+    if (sectionDrag !== null) {
+      // Only other section headers are targets while one moves.
+      return (args: Parameters<CollisionDetection>[0]) =>
+        closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter(
+            (container) => sectionIdOfHeaderId(String(container.id)) !== null,
+          ),
+        });
+    }
     if (draggedThreadKey === undefined || draggedFromSection === undefined)
       return createSidebarCollisionDetection(() => true);
     const source = threadByKey.get(draggedThreadKey);
@@ -2182,12 +2522,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       (id) => {
         const unscopedTarget = resolveSidebarDropTarget(sidebarListItems, draggedThreadKey, id);
         if (unscopedTarget === null) return false;
-        const { target, activeOrder } = scopeSidebarActiveDropToGroup({
-          target: unscopedTarget,
-          activeOrder: activeKeys,
-          activeKey: draggedThreadKey,
-          coordinatorKeys,
-        });
+        const { target, activeOrder, sectionChange } = scopeThreadDrop(
+          draggedThreadKey,
+          unscopedTarget,
+        );
         return (
           planSidebarThreadDrop({
             activeKey: draggedThreadKey,
@@ -2203,6 +2541,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             activeKeysById,
             activeReorderableKeys: activeReorderableThreadKeys,
             activeTimeOrdered: workingShelfEnabled,
+            sectionChange,
           }).kind !== "none"
         );
       },
@@ -2214,6 +2553,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   })();
   const handleThreadDragEnd = (event: DragEndEvent) => {
     if (projectFolders !== null) return;
+    if (sectionDrag !== null) {
+      const overSectionId = event.over ? sectionIdOfHeaderId(String(event.over.id)) : null;
+      if (overSectionId === null || overSectionId === sectionDrag.sectionId) return;
+      reorderSections(
+        moveSidebarSectionIds(
+          sections.map((section) => section.id),
+          sectionDrag.sectionId,
+          overSectionId,
+        ),
+      );
+      return;
+    }
     const activeKey = String(event.active.id);
     const activeSection = sectionByThreadKey.get(activeKey);
     const unscopedTarget =
@@ -2224,12 +2575,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     if (activeSection === undefined || unscopedTarget === null || activeThread === undefined)
       return;
     const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
-    const { target, activeOrder: groupActiveOrder } = scopeSidebarActiveDropToGroup({
-      target: unscopedTarget,
-      activeOrder: activeKeys,
-      activeKey,
-      coordinatorKeys,
-    });
+    const {
+      target,
+      activeOrder: groupActiveOrder,
+      group: dropGroup,
+      sectionChange,
+      nextSectionId,
+    } = scopeThreadDrop(activeKey, unscopedTarget);
     const plan = planSidebarThreadDrop({
       activeKey,
       activeSection,
@@ -2244,9 +2596,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       activeKeysById,
       activeReorderableKeys: activeReorderableThreadKeys,
       activeTimeOrdered: workingShelfEnabled,
+      sectionChange,
     });
     if (plan.kind === "none") return;
     if (plan.kind === "settle" && settlingThreadKeysRef.current.has(activeKey)) return;
+    const movesSection = plan.kind === "move-active" && sectionChange;
     const assignments =
       plan.kind === "pin"
         ? [
@@ -2282,11 +2636,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 groupOrder: plan.order,
                 activeOrder: activeKeys,
                 activeKey,
-                coordinatorKeys,
+                groups: groupsModel,
+                group: dropGroup,
               })
             : plan.order,
       keysAtDrop: target.section === "active" ? activeKeysById : pinnedKeysById,
       assignedKeys: new Map(assignments.map(({ id, orderKey }) => [id, orderKey])),
+      ...(movesSection ? { sectionId: nextSectionId } : {}),
     };
     setOptimisticDrop(drop);
     void (async () => {
@@ -2330,6 +2686,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           return;
         }
         case "move-active":
+          if (
+            movesSection &&
+            !(await run(
+              moveThreadToSidebarSection({
+                threadRef,
+                section: nextSectionId === null ? null : (sectionById.get(nextSectionId) ?? null),
+                orderedIds: sections.map((section) => section.id),
+              }),
+              gt("Failed to move thread"),
+            ))
+          )
+            return;
           if (plan.unpin && !(await run(unpinThread(threadRef), gt("Failed to unpin thread"))))
             return;
           if (
@@ -2829,6 +3197,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 titleRegeneration: configLoaded,
               },
               snoozePresets,
+              // Workers stay under their parent, and folders arrange boring mode instead.
+              ...(!isNested && configLoaded && projectFolders === null
+                ? {
+                    sections: {
+                      options: sections,
+                      currentId: resolveSidebarThreadSectionId(thread, sectionIds),
+                    },
+                  }
+                : {}),
             }),
             position,
             source,
@@ -2836,6 +3213,21 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
         if (clicked._tag === "Failure" || clicked.value === null) return;
         if (threadActionRequiresOperate(clicked.value) && !checkThreadOperations([thread])) return;
+        if (clicked.value.startsWith("section-move:")) {
+          moveThreadToSection(
+            threadRef,
+            sectionById.get(clicked.value.slice("section-move:".length)) ?? null,
+          );
+          return;
+        }
+        if (clicked.value === "section-remove") {
+          moveThreadToSection(threadRef, null);
+          return;
+        }
+        if (clicked.value === "section-new") {
+          startNewSection(thread.environmentId, threadRef);
+          return;
+        }
         if (clicked.value?.startsWith("snooze:")) {
           const preset =
             clicked.value === "snooze:custom"
@@ -3156,6 +3548,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         fixedHeader={
           <SidebarGroup className="z-[1]">
             <SidebarThreadHeader
+              onNewSection={
+                projectFolders === null && newSectionEnvironmentId !== null
+                  ? () => startNewSection(newSectionEnvironmentId)
+                  : undefined
+              }
               hasProjects={projectGroups.length > 0}
               projectScope={
                 <Combobox
@@ -3574,17 +3971,20 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         // The tree row of the project folder this row sits in.
                         folderRow?: string,
                       ) => {
-                        const groupRow =
-                          coordinatorGroups !== null && section === "active"
-                            ? coordinatorKeys?.has(
-                                scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-                              )
-                              ? "group:coordinators"
-                              : "group:threads"
-                            : undefined;
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
+                        const rowGroup =
+                          groupsModel !== null && section === "active"
+                            ? groupsModel.groupOf.get(threadKey)
+                            : undefined;
+                        const rowSectionId = sectionIdOfSidebarGroup(rowGroup ?? null);
+                        const groupRow =
+                          rowGroup === undefined
+                            ? undefined
+                            : rowSectionId !== null
+                              ? sidebarSectionRowId(rowSectionId)
+                              : `group:${rowGroup}`;
                         const isCard =
                           section === "active" || section === "pinned" || section === "working";
                         const rowVariant = folderRow
@@ -3628,7 +4028,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             isPinned={thread.pinnedAt != null}
                             dropVerb={
                               dragState?.activeKey === threadKey
-                                ? resolveSidebarDropVerb(dragState.activeSection, dragTargetSection)
+                                ? (dragSectionVerb ??
+                                  resolveSidebarDropVerb(
+                                    dragState.activeSection,
+                                    dragTargetSection,
+                                  ))
+                                : null
+                            }
+                            dropSectionName={
+                              dragState?.activeKey === threadKey && dragSectionVerb === "section"
+                                ? (dragTargetSectionName ?? null)
                                 : null
                             }
                             dragOverPinned={
@@ -3789,37 +4198,65 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             );
                             break;
                           case "coordinators-header":
-                            if (coordinatorGroups === null) break;
+                            if (activeGroups?.coordinators == null) break;
                             items.push(
                               <SidebarGroupHeader
                                 key="coordinators-group-header"
                                 marker="coordinators-header"
                                 label={gt("Coordinators", { $context: "sidebar section" })}
-                                count={coordinatorGroups.coordinators.length}
+                                count={activeGroups.coordinators.length}
                                 toggle={{
-                                  expanded: !coordinatorGroups.coordinatorsCollapsed,
+                                  expanded: !activeGroups.coordinatorsCollapsed,
                                   onToggle: toggleCoordinatorGroup,
                                 }}
                                 onNewThread={startCoordinatorThread}
                                 newThreadLabel={gt("New coordinator")}
+                                isDropTarget={dragTargetGroup === "coordinators"}
                               />,
                             );
                             break;
                           case "threads-header":
-                            if (coordinatorGroups === null) break;
+                            if (activeGroups === null) break;
                             items.push(
                               <SidebarGroupHeader
                                 key="threads-group-header"
                                 marker="threads-header"
                                 label={gt("Threads", { $context: "sidebar section" })}
-                                count={coordinatorGroups.others.length}
+                                count={activeGroups.others.length}
                                 toggle={{
-                                  expanded: !coordinatorGroups.othersCollapsed,
+                                  expanded: !activeGroups.othersCollapsed,
                                   onToggle: toggleThreadGroup,
                                 }}
+                                isDropTarget={dragTargetGroup === "threads"}
                               />,
                             );
                             break;
+                          default: {
+                            const entry = sectionEntryById.get(
+                              item.marker.slice(SIDEBAR_SECTION_HEADER_PREFIX.length),
+                            );
+                            if (entry === undefined) break;
+                            items.push(
+                              <SidebarCustomSectionHeader
+                                key={item.marker}
+                                sectionId={entry.section.id}
+                                name={entry.section.name}
+                                count={entry.threads.length}
+                                collapsed={entry.collapsed}
+                                hiddenThreads={entry.hiddenThreads}
+                                renaming={renamingSectionId === entry.section.id}
+                                draggable={dragState === null && sections.length > 1}
+                                isDropTarget={
+                                  dragTargetSectionId === entry.section.id ||
+                                  sectionDrag?.overSectionId === entry.section.id
+                                }
+                                dragging={from !== null || sectionDrag !== null}
+                                onToggle={toggleSection}
+                                onRenameDone={finishSectionRename}
+                                onContextMenu={handleSectionContextMenu}
+                              />,
+                            );
+                          }
                           case "working-header":
                             items.push(
                               <SidebarSectionHeader

@@ -47,6 +47,8 @@ import {
   CircleDashedIcon,
   CircleDotDashedIcon,
   ClockIcon,
+  FolderInputIcon,
+  FolderOutputIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
   NetworkIcon,
@@ -568,6 +570,18 @@ const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
       <T>Wake</T>
     </>
   ),
+  section: (
+    <>
+      <FolderInputIcon aria-hidden className="size-3" />
+      <T>Move to section</T>
+    </>
+  ),
+  unsection: (
+    <>
+      <FolderOutputIcon aria-hidden className="size-3" />
+      <T>Remove from section</T>
+    </>
+  ),
 };
 
 const TOP_STATUS_ICONS = {
@@ -599,6 +613,8 @@ type SidebarThreadRowProps = {
   isPinned: boolean;
   sortable?: SortableThreadRowBag | undefined;
   dropVerb: SidebarDropVerb | null;
+  /** Names the section a `section` drop moves the thread into. */
+  dropSectionName?: string | null;
   dragOverPinned: boolean;
   sweepAction: SidebarSweepAction | null;
   snoozeWakeLabelText: string | null;
@@ -1073,7 +1089,16 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         role="status"
         className="pointer-events-none ml-auto inline-flex h-5 shrink-0 items-center gap-1 rounded-sm border border-primary/40 bg-primary/10 px-1.5 text-2xs font-medium text-primary"
       >
-        {dropVerbBadge[destinationVerb]}
+        {destinationVerb === "section" && props.dropSectionName ? (
+          <>
+            <FolderInputIcon aria-hidden className="size-3 shrink-0" />
+            <span className="max-w-32 truncate">
+              {gt("Move to {section}", { section: props.dropSectionName })}
+            </span>
+          </>
+        ) : (
+          dropVerbBadge[destinationVerb]
+        )}
       </span>
     ) : null;
 

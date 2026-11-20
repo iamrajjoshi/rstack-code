@@ -562,6 +562,73 @@ describe("coordinator role", () => {
   });
 });
 
+describe("sidebar sections", () => {
+  const shell = {
+    id: "thread-test",
+    projectId: "project-test",
+    title: "Thread",
+    providerInstanceId: "codex",
+    modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    branch: null,
+    worktreePath: null,
+    activeProviderThreadId: null,
+    lineage: { rootThreadId: "thread-test", parentThreadId: null, relationshipToParent: null },
+    forkedFrom: null,
+    createdBy: "user",
+    creationSource: "web",
+    latestRunId: null,
+    activeRunId: null,
+    status: "idle",
+    pendingRuntimeRequest: null,
+    latestVisibleMessage: null,
+    latestUserMessageAt: null,
+    hasActionableProposedPlan: false,
+    itemCount: 0,
+    visibleItemCount: 0,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+    archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
+    deletedAt: null,
+  };
+
+  it("costs a shell snapshot bytes only for the threads placed in a section", () => {
+    const codec = Schema.toCodecJson(OrchestrationV2ThreadShellJson);
+    const decode = Schema.decodeUnknownSync(codec);
+    const encode = Schema.encodeSync(codec);
+    const snapshotBytes = (sectioned: number) =>
+      new TextEncoder().encode(
+        JSON.stringify(
+          Array.from({ length: 130 }, (_, index) =>
+            encode(
+              decode({
+                ...shell,
+                id: `thread-${index}`,
+                ...(index < sectioned ? { sectionId: "section-1" } : {}),
+              }),
+            ),
+          ),
+        ),
+      ).byteLength;
+    const perThread = ',"sectionId":"section-1"'.length;
+    expect(snapshotBytes(13) - snapshotBytes(0)).toBe(13 * perThread);
+  });
+
+  it("clears a thread's section with null", () => {
+    const decodeCommand = Schema.decodeUnknownSync(OrchestrationV2Command);
+    const cleared = decodeCommand({
+      type: "thread.section.set",
+      commandId: "command-test",
+      threadId: "thread-test",
+      sectionId: null,
+    });
+    expect(cleared.type === "thread.section.set" && cleared.sectionId).toBeNull();
+  });
+});
+
 describe("background work kinds from older or newer servers", () => {
   const storedNotification = (source: unknown) => ({
     id: "notification",

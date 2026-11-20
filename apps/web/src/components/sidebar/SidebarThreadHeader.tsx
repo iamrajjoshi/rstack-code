@@ -1,5 +1,5 @@
 import { useGT } from "gt-react";
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { FolderPlusIcon, ListPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -30,6 +30,8 @@ export interface SidebarThreadHeaderProps {
   searchResultCount: number;
   activeSearchResultIndex: number;
   onClearSearch: () => void;
+  /** Absent where sections do not show, such as the project-grouped sidebar. */
+  onNewSection?: (() => void) | undefined;
 }
 
 export function SidebarThreadHeader({
@@ -49,6 +51,7 @@ export function SidebarThreadHeader({
   searchResultCount,
   activeSearchResultIndex,
   onClearSearch,
+  onNewSection,
 }: SidebarThreadHeaderProps) {
   const gt = useGT();
   const resultsVisible = isSearching && searchResultCount > 0;
@@ -106,6 +109,11 @@ export function SidebarThreadHeader({
               <FolderPlusIcon />
             </SidebarHeaderIconButton>
           </>
+        ) : null}
+        {onNewSection ? (
+          <SidebarHeaderIconButton label={gt("New section")} onClick={onNewSection}>
+            <ListPlusIcon />
+          </SidebarHeaderIconButton>
         ) : null}
         <SidebarHeaderIconButton
           label={gt("New thread")}

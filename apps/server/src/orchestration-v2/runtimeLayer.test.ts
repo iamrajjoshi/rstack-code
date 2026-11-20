@@ -3751,6 +3751,19 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         DateTime.toEpochMillis(taggedShell.updatedAt),
         DateTime.toEpochMillis(untaggedShell.updatedAt),
       );
+      yield* orchestrator.dispatch({
+        type: "thread.section.set",
+        commandId: CommandId.make("runtime-layer-lifecycle-section"),
+        threadId,
+        sectionId: "section-a",
+      });
+      const sectionedShell = shellOf(yield* orchestrator.getShellSnapshot());
+      assert.equal(sectionedShell.sectionId, "section-a");
+      // Arranging a thread is not activity either.
+      assert.equal(
+        DateTime.toEpochMillis(sectionedShell.updatedAt),
+        DateTime.toEpochMillis(untaggedShell.updatedAt),
+      );
 
       const preAutoProjection = yield* orchestrator.getThreadProjection(threadId);
       const staleAutoSettle = yield* orchestrator
@@ -3798,6 +3811,15 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       const settledProjection = yield* orchestrator.getThreadProjection(threadId);
       assert.equal(settledProjection.thread.settledOverride, "settled");
       assert.isNotNull(settledProjection.thread.settledAt);
+      // Settling keeps the section, so un-settling returns the thread there.
+      assert.equal(settledProjection.thread.sectionId, "section-a");
+      yield* orchestrator.dispatch({
+        type: "thread.section.set",
+        commandId: CommandId.make("runtime-layer-lifecycle-section-clear"),
+        threadId,
+        sectionId: null,
+      });
+      assert.isFalse("sectionId" in shellOf(yield* orchestrator.getShellSnapshot()));
 
       yield* orchestrator.dispatch({
         type: "thread.unsettle",

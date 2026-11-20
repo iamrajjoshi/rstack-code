@@ -38,7 +38,6 @@ import {
   resolveSidebarFolderDot,
   scopeSidebarActiveDropToGroup,
   sidebarFolderExpansionKeys,
-  splitSidebarCoordinatorThreads,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -1710,6 +1709,16 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
 
 describe("coordinator groups", () => {
   const coordinatorKeys = new Set(["c1", "c2"]);
+  const groups = {
+    order: ["coordinators", "threads"],
+    groupOf: new Map([
+      ["c1", "coordinators"],
+      ["c2", "coordinators"],
+      ["r1", "threads"],
+      ["r2", "threads"],
+    ]),
+    coordinatorKeys,
+  };
   const activeKeysById = new Map([
     ["c1", "b"],
     ["r1", "c"],
@@ -1717,26 +1726,21 @@ describe("coordinator groups", () => {
     ["r2", "e"],
   ]);
 
-  it("splits the active list into coordinators and other threads, keeping each order", () => {
-    const split = splitSidebarCoordinatorThreads([
-      { id: "r1" },
-      { id: "c1", coordinator: true },
-      { id: "r2", coordinator: false },
-      { id: "c2", coordinator: true },
-    ]);
-    expect(split.coordinators.map((thread) => thread.id)).toEqual(["c1", "c2"]);
-    expect(split.others.map((thread) => thread.id)).toEqual(["r1", "r2"]);
-  });
-
   it("orders a drop among its own group, so only the moved thread gets a key", () => {
     const groupedOrder = ["c1", "c2", "r1", "r2"];
-    const { target, activeOrder } = scopeSidebarActiveDropToGroup({
+    const { target, activeOrder, group } = scopeSidebarActiveDropToGroup({
       // r2 dropped into the coordinator group lands first among the other threads.
-      target: { section: "active", pinnedOrder: [], activeOrder: ["c1", "r2", "c2", "r1"] },
+      target: {
+        section: "active",
+        pinnedOrder: [],
+        activeOrder: ["c1", "r2", "c2", "r1"],
+        group: "coordinators",
+      },
       activeOrder: groupedOrder,
       activeKey: "r2",
-      coordinatorKeys,
+      groups,
     });
+    expect(group).toBe("threads");
     expect(target.activeOrder).toEqual(["r2", "r1"]);
     const plan = planSidebarThreadDrop({
       activeKey: "r2",
@@ -1758,7 +1762,8 @@ describe("coordinator groups", () => {
         groupOrder: plan.order,
         activeOrder: groupedOrder,
         activeKey: "r2",
-        coordinatorKeys,
+        groups,
+        group,
       }),
     ).toEqual(["c1", "c2", "r2", "r1"]);
   });
@@ -1770,8 +1775,109 @@ describe("coordinator groups", () => {
         target,
         activeOrder: ["c1", "r2"],
         activeKey: "r2",
-        coordinatorKeys: null,
+        groups: null,
       }),
-    ).toEqual({ target, activeOrder: ["c1", "r2"] });
+    ).toEqual({ target, activeOrder: ["c1", "r2"], group: null });
+  });
+});
+
+describe("sidebar section drops", () => {
+  const marker = (name: SidebarListMarker): SidebarListItem => ({ kind: "marker", marker: name });
+  const row = (key: string, section: "pinned" | "active" = "active"): SidebarListItem => ({
+    kind: "thread",
+    key,
+    section,
+  });
+  // A section "s", then coordinators and threads; c1 is a coordinator in s with its own order.
+  const items: readonly SidebarListItem[] = [
+    marker("pinned-header"),
+    row("p1", "pinned"),
+    marker("pinned-divider"),
+    marker("active-placeholder"),
+    marker("section-header:s"),
+    row("c1"),
+    row("s1"),
+    marker("coordinators-header"),
+    row("c2"),
+    marker("threads-header"),
+    row("r1"),
+    row("r2"),
+    marker("settled-header"),
+  ];
+  const groups = {
+    order: ["section:s", "coordinators", "threads"],
+    groupOf: new Map([
+      ["c1", "section:s"],
+      ["s1", "section:s"],
+      ["c2", "coordinators"],
+      ["r1", "threads"],
+      ["r2", "threads"],
+    ]),
+    coordinatorKeys: new Set(["c1", "c2"]),
+  };
+  const activeKeysById = new Map([
+    ["c1", "b"],
+    ["s1", "c"],
+    ["c2", "d"],
+    ["r1", "e"],
+    ["r2", "f"],
+  ]);
+  const plan = (activeKey: string, overId: string, from: "pinned" | "active" = "active") => {
+    const unscoped = resolveSidebarDropTarget(items, activeKey, overId)!;
+    const scoped = scopeSidebarActiveDropToGroup({
+      target: unscoped,
+      activeOrder: ["c1", "s1", "c2", "r1", "r2"],
+      activeKey,
+      groups,
+    });
+    return {
+      group: scoped.group,
+      plan: planSidebarThreadDrop({
+        activeKey,
+        activeSection: from,
+        target: scoped.target,
+        pinnedOrder: ["p1"],
+        pinnedKeysById: new Map([["p1", "m"]]),
+        activeOrder: scoped.activeOrder,
+        activeKeysById,
+        sectionChange: (groups.groupOf.get(activeKey) ?? null) !== scoped.group,
+      }),
+    };
+  };
+
+  it("moves a thread dropped under a section header into that section, ordered among it", () => {
+    const { group, plan: drop } = plan("r2", "s1");
+    expect(group).toBe("section:s");
+    expect(drop.kind === "move-active" && drop.order).toEqual(["c1", "r2", "s1"]);
+  });
+
+  it("takes a thread out of its section when dropped in the default groups", () => {
+    // A coordinator returns to Coordinators wherever below the sections it lands.
+    expect(plan("c1", "r1").group).toBe("coordinators");
+    expect(plan("s1", "r1").group).toBe("threads");
+    expect(plan("s1", "r1").plan.kind).toBe("move-active");
+  });
+
+  it("unpins a pinned thread dropped into a section", () => {
+    const { group, plan: drop } = plan("p1", "s1", "pinned");
+    expect(group).toBe("section:s");
+    expect(drop.kind === "move-active" && drop.unpin).toBe(true);
+  });
+
+  it("still moves sections while the active list is ordered by time", () => {
+    const unscoped = resolveSidebarDropTarget(items, "r2", "s1")!;
+    expect(
+      planSidebarThreadDrop({
+        activeKey: "r2",
+        activeSection: "active",
+        target: unscoped,
+        pinnedOrder: [],
+        pinnedKeysById: new Map(),
+        activeOrder: [],
+        activeKeysById,
+        activeTimeOrdered: true,
+        sectionChange: true,
+      }),
+    ).toMatchObject({ kind: "move-active", order: null, assignments: [] });
   });
 });

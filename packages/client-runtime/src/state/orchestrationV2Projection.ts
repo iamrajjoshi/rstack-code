@@ -322,6 +322,7 @@ export function applyOrchestrationV2ProjectionEvent(
     case "thread.guest-share-updated":
       return { ...base, thread: event.payload };
     // Visited tracking and tags are not activity: skip the updatedAt bump.
+    case "thread.section-set":
     case "thread.visited":
     case "thread.tags-updated":
     case "thread.marked-unread":

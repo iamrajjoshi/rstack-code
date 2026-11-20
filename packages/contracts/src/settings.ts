@@ -148,6 +148,17 @@ export const DEFAULT_SNOOZE_PRESETS: ReadonlyArray<SnoozePresetSetting> = [
   { kind: "at", day: "monday", time: "09:00" },
 ];
 
+const MAX_SIDEBAR_SECTIONS = 100;
+/** A user-made sidebar section. Threads name it by `id`; list order is display order. */
+export const SidebarSectionSetting = Schema.Struct({
+  id: TrimmedNonEmptyString.check(Schema.isMaxLength(64)),
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(120)),
+});
+export type SidebarSectionSetting = typeof SidebarSectionSetting.Type;
+export const SidebarSectionSettings = Schema.Array(SidebarSectionSetting).check(
+  Schema.isMaxLength(MAX_SIDEBAR_SECTIONS),
+);
+
 export const MIN_GLASS_OPACITY = 40;
 export const MAX_GLASS_OPACITY = 100;
 export const GlassOpacity = Schema.Int.check(
@@ -1491,6 +1502,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   hideTaggedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  sidebarSections: SidebarSectionSettings.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   /** Beta: guest links for this machine's threads. Off refuses new links and pauses existing ones. */
   guestSharingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -1957,6 +1969,7 @@ export const ServerSettingsPatch = Schema.Struct({
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
+  sidebarSections: Schema.optionalKey(SidebarSectionSettings),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

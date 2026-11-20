@@ -539,6 +539,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
   titleRenamed: Schema.optional(Schema.Boolean),
   /** Coordinator threads delegate implementation to workers; absent reads as false. */
   coordinator: Schema.optional(Schema.Boolean),
+  /** The user's sidebar section; ids name entries in the `sidebarSections` setting. */
+  sectionId: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   rollbackRequestId: Schema.optional(CommandId),
   rollbackFailure: Schema.optional(
     Schema.NullOr(
@@ -2048,6 +2050,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.unpinned",
       "thread.pin-reordered",
       "thread.active-reordered",
+      "thread.section-set",
       "thread.tags-updated",
       "thread.visited",
       "thread.marked-unread",
@@ -2328,6 +2331,8 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   lastTitleRegeneration: Schema.optional(Schema.NullOr(OrchestrationV2LastTitleRegeneration)),
   /** Sent only when true, so regular threads cost no shell bytes. */
   coordinator: Schema.optional(Schema.Boolean),
+  /** Sent only when set, like `coordinator`. */
+  sectionId: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   deletedAt: Schema.NullOr(Schema.DateTimeUtc),
 });
 export type OrchestrationV2ThreadShell = typeof OrchestrationV2ThreadShell.Type;
@@ -3010,6 +3015,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.unpinned",
       "thread.pin-reordered",
       "thread.active-reordered",
+      "thread.section-set",
       "thread.tags-updated",
       "thread.visited",
       "thread.marked-unread",
@@ -3296,6 +3302,12 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     orderKey: TrimmedNonEmptyString,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.section.set"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    sectionId: Schema.NullOr(TrimmedNonEmptyString),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.visit"),

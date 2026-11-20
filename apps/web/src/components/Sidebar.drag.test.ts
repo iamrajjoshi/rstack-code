@@ -547,7 +547,15 @@ describe("sidebar drag projection", () => {
       items,
       settledOrder: [],
       settledExpanded: false,
-      coordinatorKeys: new Set(["c1"]),
+      groups: {
+        order: ["coordinators", "threads"],
+        groupOf: new Map([
+          ["c1", "coordinators"],
+          ["r1", "threads"],
+          ["r2", "threads"],
+        ]),
+        coordinatorKeys: new Set(["c1"]),
+      },
     };
     const result = preview(input, "r2", "c1");
     // Everything shifts alike by the fixture's 1px gap after the dropped placeholder.
@@ -557,6 +565,38 @@ describe("sidebar drag projection", () => {
     expect(result.get(sidebarMarkerId("threads-header"))).toEqual({ ...stationary, y: shift });
     // r2 previews first among threads, above r1.
     expect(result.get("r1")?.y).toBe(shift! + 83);
+  });
+
+  it("previews a thread dropped under a section header inside that section", () => {
+    const items = [
+      pinnedHeader,
+      divider,
+      marker("active-placeholder"),
+      marker("section-header:s"),
+      thread("s1", "active"),
+      marker("threads-header"),
+      thread("r1", "active"),
+      settledHeader,
+      marker("settled-placeholder"),
+    ];
+    const input = {
+      items,
+      settledOrder: [],
+      settledExpanded: false,
+      groups: {
+        order: ["section:s", "threads"],
+        groupOf: new Map([
+          ["s1", "section:s"],
+          ["r1", "threads"],
+        ]),
+        coordinatorKeys: null,
+      },
+    };
+    const result = preview(input, "r1", "s1");
+    const header = result.get(sidebarMarkerId("section-header:s"))!.y;
+    // r1 takes s1's slot and s1 moves down a card, above the Threads header.
+    expect(result.get("s1")?.y).toBe(header + 83);
+    expect(result.get(sidebarMarkerId("threads-header"))!.y).toBe(header + 83);
   });
 
   it("updates the projection when the target or measured geometry changes", () => {

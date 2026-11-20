@@ -20,6 +20,10 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "section"
+  | `section-move:${string}`
+  | "section-new"
+  | "section-remove"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -126,6 +130,11 @@ export interface ThreadActionMenuState {
   readonly canTurnIntoProject?: boolean;
   /** A coordinator, on an environment with rstack-board turned on. */
   readonly canOpenOnBoard?: boolean;
+  /** The user's sidebar sections, for a top-level thread on a web or desktop sidebar. */
+  readonly sections?: {
+    readonly options: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+    readonly currentId: string | null;
+  };
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -202,6 +211,36 @@ export function buildThreadActionMenuItems(
                   },
                 ],
               },
+        ]
+      : []),
+    ...(state.sections
+      ? [
+          {
+            id: "section" as const,
+            label: resolve(msg("Move to section")),
+            icon: "folder-tree",
+            children: [
+              ...state.sections.options.map((section) => ({
+                id: `section-move:${section.id}` as const,
+                label: section.name,
+                checked: section.id === state.sections?.currentId,
+              })),
+              {
+                id: "section-new" as const,
+                label: resolve(msg("New section…")),
+                icon: "folder-plus",
+                separatorBefore: state.sections.options.length > 0,
+              },
+              ...(state.sections.currentId !== null
+                ? [
+                    {
+                      id: "section-remove" as const,
+                      label: resolve(msg("Remove from section")),
+                    },
+                  ]
+                : []),
+            ],
+          },
         ]
       : []),
     {

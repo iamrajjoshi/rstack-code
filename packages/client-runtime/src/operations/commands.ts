@@ -123,6 +123,10 @@ export interface ReorderActiveThreadInput extends ThreadCommandInput {
   readonly orderKey: string;
 }
 
+export interface SetThreadSectionInput extends ThreadCommandInput {
+  readonly sectionId: string | null;
+}
+
 export interface SnoozeThreadInput extends ThreadCommandInput {
   readonly snoozedUntil: string;
 }
@@ -621,6 +625,17 @@ export const reorderActiveThread = Effect.fn("EnvironmentCommands.reorderActiveT
     commandId: yield* allocateCommandId(input),
     threadId: input.threadId,
     orderKey: input.orderKey,
+  });
+});
+
+export const setThreadSection = Effect.fn("EnvironmentCommands.setThreadSection")(function* (
+  input: SetThreadSectionInput,
+) {
+  return yield* dispatch({
+    type: "thread.section.set",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    sectionId: input.sectionId,
   });
 });
 

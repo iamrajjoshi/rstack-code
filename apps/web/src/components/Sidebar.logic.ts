@@ -40,6 +40,12 @@ import {
   type ThreadSortInput,
 } from "@t3tools/client-runtime/state/thread-sort";
 import type { SidebarThreadSummary, Thread } from "../types";
+import {
+  resolveSidebarDropGroup,
+  sectionIdOfSidebarGroup,
+  SIDEBAR_SECTION_HEADER_PREFIX,
+  sidebarSectionGroupId,
+} from "./sidebar/SidebarSections.logic";
 import { normalizeSearchText } from "../lib/utils";
 import { isLatestRunSettled } from "../session-logic";
 import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";
@@ -215,7 +221,8 @@ export type SidebarListMarker =
   | "snoozed-header"
   | "settled-header"
   | "coordinators-header"
-  | "threads-header";
+  | "threads-header"
+  | `${typeof SIDEBAR_SECTION_HEADER_PREFIX}${string}`;
 
 export function sidebarMarkerId(marker: SidebarListMarker): string {
   return `${SIDEBAR_MARKER_PREFIX}${marker}`;
@@ -243,55 +250,93 @@ function sectionAtSidebarSlot(items: readonly SidebarListItem[], index: number):
 }
 
 /**
- * Splits the active list into coordinators and other threads, each keeping its order. Worker
- * threads never reach the active list; they nest under their parent.
+ * The active list's headed groups while any show: the user's sections, then coordinators and
+ * threads. Each group opens with its header marker.
  */
-export function splitSidebarCoordinatorThreads<T extends { readonly coordinator?: boolean }>(
-  threads: readonly T[],
-): { readonly coordinators: T[]; readonly others: T[] } {
-  const coordinators: T[] = [];
-  const others: T[] = [];
-  for (const thread of threads) (thread.coordinator === true ? coordinators : others).push(thread);
-  return { coordinators, others };
+export type SidebarActiveGroups = {
+  /** Group ids in display order. */
+  readonly order: readonly string[];
+  /** The group of each active thread. */
+  readonly groupOf: ReadonlyMap<string, string>;
+  /** Coordinator thread keys while coordinator groups show; they pick a thread's default group. */
+  readonly coordinatorKeys: ReadonlySet<string> | null;
+};
+
+export function sidebarGroupHeaderMarker(group: string): SidebarListMarker {
+  if (group === "coordinators") return "coordinators-header";
+  if (group === "threads") return "threads-header";
+  return `${SIDEBAR_SECTION_HEADER_PREFIX}${sectionIdOfSidebarGroup(group) ?? group}`;
+}
+
+function sidebarGroupOfMarker(marker: SidebarListMarker): string | null {
+  if (marker === "coordinators-header") return "coordinators";
+  if (marker === "threads-header") return "threads";
+  return marker.startsWith(SIDEBAR_SECTION_HEADER_PREFIX)
+    ? sidebarSectionGroupId(marker.slice(SIDEBAR_SECTION_HEADER_PREFIX.length))
+    : null;
 }
 
 /**
- * With coordinator groups shown, an active drop reorders the thread only among its own group, so
- * its order key lands between same-group neighbours and the other group keeps its keys.
+ * With groups shown, an active drop orders the thread only among the group it lands in, so its
+ * order key lands between that group's rows and other groups keep their keys. A drop under a
+ * section header moves the thread into that section; anywhere else it returns to its default
+ * group.
  */
 export function scopeSidebarActiveDropToGroup(input: {
   readonly target: SidebarDropTarget;
   readonly activeOrder: readonly string[];
   readonly activeKey: string;
-  readonly coordinatorKeys: ReadonlySet<string> | null;
-}): { readonly target: SidebarDropTarget; readonly activeOrder: readonly string[] } {
-  const { target, activeOrder, activeKey, coordinatorKeys } = input;
-  if (coordinatorKeys === null || target.section !== "active") return { target, activeOrder };
-  const inGroup = (key: string) => coordinatorKeys.has(key) === coordinatorKeys.has(activeKey);
+  readonly groups: SidebarActiveGroups | null;
+}): {
+  readonly target: SidebarDropTarget;
+  readonly activeOrder: readonly string[];
+  readonly group: string | null;
+} {
+  const { target, activeOrder, activeKey, groups } = input;
+  if (groups === null || target.section !== "active") return { target, activeOrder, group: null };
+  const group = resolveSidebarDropGroup({
+    slotGroup: target.group ?? null,
+    coordinator: groups.coordinatorKeys?.has(activeKey) ?? false,
+    coordinatorGroups: groups.coordinatorKeys !== null,
+  });
+  const inGroup = (key: string) => groups.groupOf.get(key) === group;
   return {
-    target: { ...target, activeOrder: target.activeOrder.filter(inGroup) },
+    target: {
+      ...target,
+      activeOrder: target.activeOrder.filter((key) => key === activeKey || inGroup(key)),
+    },
     activeOrder: activeOrder.filter(inGroup),
+    group,
   };
 }
 
-/** The whole active list after a group-scoped drop: coordinators first, then the rest. */
+/** The whole active list after a group-scoped drop, group by group in display order. */
 export function mergeSidebarGroupDropOrder(input: {
   readonly groupOrder: readonly string[];
   readonly activeOrder: readonly string[];
   readonly activeKey: string;
-  readonly coordinatorKeys: ReadonlySet<string> | null;
+  readonly groups: SidebarActiveGroups | null;
+  readonly group: string | null;
 }): readonly string[] {
-  const { groupOrder, activeOrder, activeKey, coordinatorKeys } = input;
-  if (coordinatorKeys === null) return groupOrder;
-  const isCoordinator = coordinatorKeys.has(activeKey);
-  const others = activeOrder.filter((key) => coordinatorKeys.has(key) !== isCoordinator);
-  return isCoordinator ? [...groupOrder, ...others] : [...others, ...groupOrder];
+  const { groupOrder, activeOrder, activeKey, groups, group } = input;
+  if (groups === null || group === null) return groupOrder;
+  const rest = activeOrder.filter((key) => key !== activeKey);
+  return [
+    ...groups.order.flatMap((candidate) =>
+      candidate === group
+        ? groupOrder
+        : rest.filter((key) => groups.groupOf.get(key) === candidate),
+    ),
+    ...(groups.order.includes(group) ? [] : groupOrder),
+  ];
 }
 
-type SidebarDropTarget = {
+export type SidebarDropTarget = {
   readonly section: "pinned" | "active" | "settled";
   readonly pinnedOrder: readonly string[];
   readonly activeOrder: readonly string[];
+  /** The headed group the slot sits in, when the active list shows groups. */
+  readonly group?: string | null;
 };
 
 export function resolveSidebarDropTarget(
@@ -309,8 +354,10 @@ export function resolveSidebarDropTarget(
   const pinnedOrder: string[] = [];
   const activeOrder: string[] = [];
   let currentSection: SidebarSection = "pinned";
-  for (const item of moved) {
+  let group: string | null = null;
+  for (const [index, item] of moved.entries()) {
     if (item.kind === "marker") {
+      if (index < overIndex) group = sidebarGroupOfMarker(item.marker) ?? group;
       if (item.marker === "pinned-divider") currentSection = "active";
       else if (
         item.marker === "working-header" ||
@@ -321,7 +368,9 @@ export function resolveSidebarDropTarget(
     } else if (currentSection === "pinned") pinnedOrder.push(item.key);
     else activeOrder.push(item.key);
   }
-  return { section, pinnedOrder, activeOrder };
+  return section === "active" && group !== null
+    ? { section, pinnedOrder, activeOrder, group }
+    : { section, pinnedOrder, activeOrder };
 }
 
 type SidebarThreadDropPlan =
@@ -347,7 +396,15 @@ type SidebarThreadDropPlan =
     }
   | { readonly kind: "settle" };
 
-export type SidebarDropVerb = "pin" | "unpin" | "settle" | "unsettle" | "wake";
+/** `section` moves a thread into a section and `unsection` takes it out, from any section. */
+export type SidebarDropVerb =
+  | "pin"
+  | "unpin"
+  | "settle"
+  | "unsettle"
+  | "wake"
+  | "section"
+  | "unsection";
 
 export function resolveSidebarDropVerb(
   from: SidebarSection,
@@ -424,6 +481,8 @@ export function planSidebarThreadDrop(input: {
   readonly activeKeysById: ReadonlyMap<string, string | null | undefined>;
   readonly activeReorderableKeys?: ReadonlySet<string>;
   readonly activeTimeOrdered?: boolean;
+  /** An active drop moves the thread into or out of a section, so it is a move even in place. */
+  readonly sectionChange?: boolean;
 }): SidebarThreadDropPlan {
   const {
     activeKey,
@@ -479,17 +538,16 @@ export function planSidebarThreadDrop(input: {
   };
   switch (target.section) {
     case "active": {
+      const sectionMove = {
+        kind: "move-active",
+        order: null,
+        assignments: [],
+        unpin: activePinned,
+        unsettle: activeSettled,
+        unsnooze: activeSection === "snoozed",
+      } as const;
       if (input.activeTimeOrdered) {
-        return activeSection === "active"
-          ? { kind: "none" }
-          : {
-              kind: "move-active",
-              order: null,
-              assignments: [],
-              unpin: activePinned,
-              unsettle: activeSettled,
-              unsnooze: activeSection === "snoozed",
-            };
+        return activeSection === "active" && !input.sectionChange ? { kind: "none" } : sectionMove;
       }
       const order = target.activeOrder;
       if (
@@ -497,10 +555,10 @@ export function planSidebarThreadDrop(input: {
         order.length === activeOrder.length &&
         order.every((key, index) => key === activeOrder[index])
       ) {
-        return { kind: "none" };
+        return input.sectionChange ? sectionMove : { kind: "none" };
       }
       const assignments = arrange(order, activeKeysById, activeReorderableKeys);
-      if (assignments === null) return { kind: "none" };
+      if (assignments === null) return input.sectionChange ? sectionMove : { kind: "none" };
       return {
         kind: "move-active",
         order,
