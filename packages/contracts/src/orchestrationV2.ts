@@ -3832,6 +3832,13 @@ const OrchestrationV2InternalCommand = Schema.Union([
     providerThreadId: ProviderThreadId,
     providerTurnId: ProviderTurnId,
   }),
+  /** Nests an existing thread under `parentThreadId` as a subagent child, as a session-tree import does. */
+  Schema.Struct({
+    type: Schema.Literal("thread.lineage.set"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    parentThreadId: ThreadId,
+  }),
   Schema.Struct({
     type: Schema.Literal("thread.background-work.settle"),
     commandId: CommandId,

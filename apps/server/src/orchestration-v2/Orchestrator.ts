@@ -687,6 +687,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "checkpoint.rollback.fail":
     case "thread.background-work.settle":
     case "thread.interrupt.unresponsive":
+    case "thread.lineage.set":
     case "thread.stop":
     case "provider.switch":
       return command.threadId;
@@ -13217,6 +13218,59 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchThreadLineageSet = Effect.fn("Orchestrator.dispatchThreadLineageSet")(function* (
+    command: Extract<OrchestrationV2InternalCommand, { readonly type: "thread.lineage.set" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const reject = (cause: string) =>
+      new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause,
+      });
+    const getThread = (threadId: ThreadId) =>
+      projectionStore.getThread(threadId).pipe(mapDispatchError(command));
+    const thread = yield* getThread(command.threadId);
+    const parent = yield* getThread(command.parentThreadId);
+    if (thread.deletedAt !== null || parent.deletedAt !== null) {
+      return yield* reject(`Thread ${command.threadId} or its new parent is deleted.`);
+    }
+    const seen = new Set<ThreadId>();
+    for (let current: typeof parent | null = parent; current !== null;) {
+      if (current.id === command.threadId || seen.has(current.id)) {
+        return yield* reject(`Nesting ${command.threadId} under ${parent.id} would form a cycle.`);
+      }
+      seen.add(current.id);
+      current =
+        current.lineage.parentThreadId === null
+          ? null
+          : yield* getThread(current.lineage.parentThreadId);
+    }
+    const lineage = {
+      parentThreadId: parent.id,
+      relationshipToParent: "subagent" as const,
+      rootThreadId: parent.lineage.rootThreadId,
+    };
+    if (
+      thread.lineage.parentThreadId === lineage.parentThreadId &&
+      thread.lineage.relationshipToParent === lineage.relationshipToParent &&
+      thread.lineage.rootThreadId === lineage.rootThreadId &&
+      thread.lineage.sideChat !== true
+    ) {
+      return;
+    }
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "thread.metadata-updated",
+      threadId: command.threadId,
+      providerInstanceId: thread.providerInstanceId,
+      occurredAt: yield* DateTime.now,
+      payload: { ...thread, lineage },
+    });
+  });
+
   const dispatchBackgroundWorkSettle = Effect.fn("Orchestrator.dispatchBackgroundWorkSettle")(
     function* (
       command: Extract<
@@ -15782,6 +15836,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.interrupt.unresponsive":
         yield* dispatchInterruptUnresponsive(command, events);
         break;
+      case "thread.lineage.set":
+        yield* dispatchThreadLineageSet(command, events);
+        break;
       case "thread.fork":
         yield* dispatchThreadFork(command, events);
         break;
@@ -15950,6 +16007,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           // A read can answer a watch again before a push's reopen lands; nothing is left to clear.
           command.type === "thread.pull-request-watch.checks-reopen" ||
           command.type === "thread.interrupt.unresponsive" ||
+          // Nesting a thread where it already sits changes nothing, so a re-run is not an error.
+          command.type === "thread.lineage.set" ||
           command.type === "thread.stop" ||
           command.type === "subagent.stop" ||
           // Closing a share again, or after it ended, is not an error.

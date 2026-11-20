@@ -51,6 +51,8 @@ export type AgentSessionScanResult = typeof AgentSessionScanResult.Type;
 export const AgentSessionImportInput = Schema.Struct({
   projectId: ProjectId,
   expectedWorkspaceRoot: Schema.optional(TrimmedNonEmptyString),
+  /** Lifts the 30-day window and the per-attempt caps, for a one-off bulk import from the CLI. */
+  allHistory: Schema.optional(Schema.Boolean),
 });
 export type AgentSessionImportInput = typeof AgentSessionImportInput.Type;
 
@@ -77,6 +79,62 @@ export const AgentSessionImportResult = Schema.Struct({
   skippedCount: NonNegativeInt,
 });
 export type AgentSessionImportResult = typeof AgentSessionImportResult.Type;
+
+/** One Claude desktop app session, written by `t3 claude-sessions export`. Carries no message content. */
+export const ClaudeSessionTreeEntry = Schema.Struct({
+  /** The Claude Code session id, which names the transcript file. */
+  sessionId: TrimmedNonEmptyString,
+  /** Other Claude Code session ids the same desktop session used. */
+  otherSessionIds: Schema.Array(TrimmedNonEmptyString),
+  title: Schema.String,
+  /** The spawning session's Claude Code session id. */
+  parentSessionId: Schema.NullOr(TrimmedNonEmptyString),
+  relationship: Schema.NullOr(Schema.Literals(["worker", "fork", "side-question"])),
+  /** Spawned at least one worker. */
+  coordinator: Schema.Boolean,
+  cwd: Schema.String,
+  worktreePath: Schema.NullOr(Schema.String),
+  branch: Schema.NullOr(Schema.String),
+  model: Schema.NullOr(Schema.String),
+  createdAt: IsoDateTime,
+  lastActiveAt: IsoDateTime,
+  archived: Schema.Boolean,
+});
+export type ClaudeSessionTreeEntry = typeof ClaudeSessionTreeEntry.Type;
+
+export const ClaudeSessionTreeManifest = Schema.Struct({
+  version: Schema.Literal(1),
+  sessions: Schema.Array(ClaudeSessionTreeEntry),
+});
+export type ClaudeSessionTreeManifest = typeof ClaudeSessionTreeManifest.Type;
+
+export const ClaudeSessionTreeApplyInput = Schema.Struct({
+  manifest: ClaudeSessionTreeManifest,
+  dryRun: Schema.Boolean,
+  /** Also unsettle imported Claude threads with no manifest entry; absent leaves them alone. */
+  unsettleUnlisted: Schema.optional(Schema.Boolean),
+});
+export type ClaudeSessionTreeApplyInput = typeof ClaudeSessionTreeApplyInput.Type;
+
+export const ClaudeSessionTreeApplyResult = Schema.Struct({
+  /** Imported threads whose Claude session is in the manifest. */
+  matched: NonNegativeInt,
+  linked: NonNegativeInt,
+  alreadyLinked: NonNegativeInt,
+  /** Children left top-level because their parent session was not imported. */
+  parentMissing: NonNegativeInt,
+  /** Manifest sessions with no imported thread yet. */
+  notImported: NonNegativeInt,
+  /** Sessions skipped because their manifest parents form a cycle. */
+  cycles: NonNegativeInt,
+  coordinatorsSet: NonNegativeInt,
+  titlesSet: NonNegativeInt,
+  /** Settled threads whose desktop session was not archived. */
+  unsettled: NonNegativeInt,
+  /** Settled threads left settled: archived in the desktop app, or unlisted without the flag. */
+  staySettled: NonNegativeInt,
+});
+export type ClaudeSessionTreeApplyResult = typeof ClaudeSessionTreeApplyResult.Type;
 
 export class AgentSessionScanError extends Schema.TaggedError<AgentSessionScanError>()(
   "AgentSessionScanError",

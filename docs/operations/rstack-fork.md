@@ -67,6 +67,14 @@ it when it is older; upstream leaves such a server running.
 `apps/server/src/board/` runs the `rstack-board` CLI (never its SQLite file) for Settings, the `board_*` tools in `t3-code`, the board paragraph coordinators and their workers get, the reply reactor (follows `tail --json`; forwards only the person's writes, deduped by command receipts keyed on the board message id) and the worker status reactor; see [the user guide](../user/board.md).
 Tests use a fake CLI script; never point a test or dev server at the real `~/.rstack-board` (the board reads `RSTACK_BOARD_STATE_DIR`).
 
+## Claude desktop session trees
+
+`t3 claude-sessions` (`apps/server/src/cli/claudeSessions.ts`) exports the Claude desktop app's
+session metadata to a manifest on the Mac and applies it on the server through the internal
+`thread.lineage.set` command plus the usual metadata and unsettle commands; see
+[the user guide](../user/welcome-page.md#claude-desktop-app-session-trees). Tests use synthetic
+fixtures; never commit real desktop metadata.
+
 ## Syncing with upstream
 
 ```bash

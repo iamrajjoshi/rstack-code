@@ -42,6 +42,12 @@ import {
   ServerAuthSessionMethod,
 } from "./auth.ts";
 import {
+  AgentSessionImportInput,
+  AgentSessionImportResult,
+  ClaudeSessionTreeApplyInput,
+  ClaudeSessionTreeApplyResult,
+} from "./agentSessions.ts";
+import {
   ExecutionEnvironmentDescriptor,
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION_TEXT,
@@ -817,6 +823,22 @@ class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
       headers: OptionalBearerHeaders,
       payload: ProjectMutation,
       success: Project,
+      error: EnvironmentProjectMutationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("importAgentSessions", "/api/projects/import-agent-sessions", {
+      headers: OptionalBearerHeaders,
+      payload: AgentSessionImportInput,
+      success: AgentSessionImportResult,
+      error: EnvironmentProjectMutationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("applyClaudeSessionTree", "/api/projects/claude-session-tree", {
+      headers: OptionalBearerHeaders,
+      payload: ClaudeSessionTreeApplyInput,
+      success: ClaudeSessionTreeApplyResult,
       error: EnvironmentProjectMutationErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}

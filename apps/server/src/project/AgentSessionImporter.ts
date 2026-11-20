@@ -8,6 +8,7 @@ import {
   AgentSessionImportProjectNotFoundError,
   AgentSessionScanError,
   AgentSessionSource,
+  CommandId,
   EventId,
   MessageId,
   ProjectId,
@@ -16,6 +17,7 @@ import {
   TurnItemId,
   type AgentSessionImportInput,
   type AgentSessionImportResult,
+  type ClaudeSessionTreeApplyInput,
   type OrchestrationV2AppThread,
   type OrchestrationV2ConversationMessage,
   type OrchestrationV2DomainEvent,
@@ -34,6 +36,7 @@ import * as Stream from "effect/Stream";
 
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
@@ -41,6 +44,7 @@ import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecuto
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
+import * as ClaudeSessionTree from "./ClaudeSessionTree.ts";
 import * as ProjectService from "./ProjectService.ts";
 
 const isProjectionStoreThreadNotFoundError = Schema.is(
@@ -48,6 +52,7 @@ const isProjectionStoreThreadNotFoundError = Schema.is(
 );
 
 const IMPORT_EVENT_PREFIX = "agent-session-import:v2";
+const CLAUDE_DRIVER = ProviderDriverKind.make("claudeAgent");
 const CLAUDE_SESSION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -262,7 +267,9 @@ const make = Effect.gen(function* () {
         ),
       );
     })).flat();
-    const outcomes = scanner.recentThreads(project.workspaceRoot, completedSources);
+    const outcomes = scanner.recentThreads(project.workspaceRoot, completedSources, {
+      allHistory: input.allHistory === true,
+    });
     const importedThreadIds = new Set<ThreadId>();
     let importedCount = 0;
     let skippedCount = 0;
@@ -596,7 +603,89 @@ const make = Effect.gen(function* () {
     return yield* commit(messages);
   });
 
-  return { importRecentAgentThreads, importNativeHistory };
+  /**
+   * Restores the Claude desktop app's session tree on threads this importer created: nesting,
+   * coordinator flags, titles and settled state, through the same commands the app uses.
+   */
+  const applyClaudeSessionTree = Effect.fn("AgentSessionImporter.applyClaudeSessionTree")(
+    function* (input: ClaudeSessionTreeApplyInput) {
+      const runtimeRows = yield* runtimes.list();
+      const threadIds = [
+        ...new Set(
+          runtimeRows.flatMap((row) => (row.threadId.startsWith("import:") ? [row.threadId] : [])),
+        ),
+      ];
+      const threads = (yield* Effect.forEach(threadIds, (threadId) =>
+        orchestrator.getThreadRecords(threadId, ["providerThreads"]).pipe(
+          Effect.map(({ thread, providerThreads }) => {
+            const nativeSessionIds = providerThreads.flatMap((providerThread) =>
+              providerThread.driver === CLAUDE_DRIVER &&
+              providerThread.nativeThreadRef?.nativeId != null
+                ? [providerThread.nativeThreadRef.nativeId]
+                : [],
+            );
+            return thread.historyOrigin !== "v1_import" ||
+              thread.deletedAt !== null ||
+              nativeSessionIds.length === 0
+              ? []
+              : [
+                  {
+                    threadId: thread.id,
+                    nativeSessionIds,
+                    title: thread.title,
+                    titleRenamed: thread.titleRenamed === true,
+                    coordinator: thread.coordinator === true,
+                    settled: thread.settledOverride === "settled" || thread.settledAt !== null,
+                    archived: thread.archivedAt !== null,
+                    lineage: thread.lineage,
+                  } satisfies ClaudeSessionTree.ImportedClaudeThread,
+                ];
+          }),
+          Effect.catchIf(
+            (cause) => isProjectionStoreThreadNotFoundError(cause.cause),
+            () => Effect.succeed([]),
+          ),
+        ),
+      )).flat();
+      const plan = ClaudeSessionTree.planClaudeSessionTree(input.manifest, threads, {
+        unsettleUnlisted: input.unsettleUnlisted === true,
+      });
+      if (input.dryRun) return plan.result;
+      for (const action of plan.actions) {
+        const commandId = CommandId.make(yield* randomUuidV4);
+        yield* orchestrator.dispatch(
+          action.type === "link"
+            ? {
+                type: "thread.lineage.set",
+                commandId,
+                threadId: action.threadId,
+                parentThreadId: action.parentThreadId,
+              }
+            : action.type === "metadata"
+              ? {
+                  type: "thread.metadata.update",
+                  commandId,
+                  threadId: action.threadId,
+                  ...(action.title === undefined ? {} : { title: action.title }),
+                  ...(action.coordinator === undefined ? {} : { coordinator: true }),
+                }
+              : {
+                  type: "thread.unsettle",
+                  commandId,
+                  threadId: action.threadId,
+                  reason: "user",
+                  // Keeps the Active list in the order the sessions were last used.
+                  ...(action.lastActiveAt === null
+                    ? {}
+                    : { restoreUnsettledAt: action.lastActiveAt }),
+                },
+        );
+      }
+      return plan.result;
+    },
+  );
+
+  return { importRecentAgentThreads, importNativeHistory, applyClaudeSessionTree };
 });
 
 type AgentSessionImporterShape = Effect.Success<typeof make>;

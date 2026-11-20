@@ -1,4 +1,5 @@
 import {
+  AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   EnvironmentHttpApi,
   requiredScopesForProjectMutation,
@@ -14,6 +15,7 @@ import {
 } from "../auth/http.ts";
 import { traceLocalHandlerWork } from "../cloud/traceRelayRequest.ts";
 import * as ServerRuntimeStartup from "../serverRuntimeStartup.ts";
+import * as AgentSessionImporter from "./AgentSessionImporter.ts";
 import * as ProjectCloneTracker from "./ProjectCloneTracker.ts";
 import * as ProjectService from "./ProjectService.ts";
 import { mutateProjectWithClone } from "./ProjectMutation.ts";
@@ -39,6 +41,7 @@ export const layer = HttpApiBuilder.group(
     const projects = yield* ProjectService.ProjectService;
     const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
     const projectClones = yield* ProjectCloneTracker.ProjectCloneTracker;
+    const agentSessionImporter = yield* AgentSessionImporter.AgentSessionImporter;
 
     return handlers
       .handle(
@@ -63,6 +66,34 @@ export const layer = HttpApiBuilder.group(
           return yield* startup
             .enqueueCommand(operation)
             .pipe(traceLocalHandlerWork, Effect.catch(failProjectMutation));
+        }),
+      )
+      .handle(
+        "importAgentSessions",
+        Effect.fn("environment.projects.importAgentSessions")(function* (args) {
+          yield* annotateEnvironmentRequest(args.endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          return yield* agentSessionImporter.importRecentAgentThreads(args.payload).pipe(
+            traceLocalHandlerWork,
+            Effect.catchTags({
+              AgentSessionImportProjectNotFoundError: () =>
+                failEnvironmentInvalidRequest("invalid_command"),
+              AgentSessionImportProjectChangedError: () =>
+                failEnvironmentInvalidRequest("invalid_command"),
+            }),
+            Effect.catch((cause) => failEnvironmentInternal("project_mutation_failed", cause)),
+          );
+        }),
+      )
+      .handle(
+        "applyClaudeSessionTree",
+        Effect.fn("environment.projects.applyClaudeSessionTree")(function* (args) {
+          yield* annotateEnvironmentRequest(args.endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          return yield* agentSessionImporter.applyClaudeSessionTree(args.payload).pipe(
+            traceLocalHandlerWork,
+            Effect.catch((cause) => failEnvironmentInternal("project_mutation_failed", cause)),
+          );
         }),
       );
   }),

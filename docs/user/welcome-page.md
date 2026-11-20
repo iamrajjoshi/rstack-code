@@ -115,3 +115,33 @@ without the remaining history.
 You can start without importing. While an import runs, T3 Code stays on the
 Welcome page. If you quit, open the Welcome page again from **Settings → About**; the
 projects you started stay checked.
+
+### Importing from the command line
+
+`t3 claude-sessions import <project>` runs the same import for one project, given
+its id or folder, while T3 Code is running. Add `--all-history` to import every
+conversation in one go instead of the last 30 days, 100 at a time. The per-file
+limits above still apply.
+
+### Claude desktop app session trees
+
+Imported conversations arrive as separate, settled threads. If you worked in the
+Claude desktop app, where one session spawns others, you can restore that tree
+afterwards: workers nest under the session that started them, sessions that
+started workers become coordinators, threads take the desktop app's titles, and
+sessions you had not archived there become active again. Archived ones stay
+settled.
+
+1. On the Mac with the desktop app, run
+   `t3 claude-sessions export --output claude-sessions.json`. The file lists session
+   ids, titles, folders and parents; it holds no messages.
+2. Copy the file to the machine that runs T3 Code.
+3. Import the projects first, then run
+   `t3 claude-sessions apply claude-sessions.json --dry-run` to see the counts, and
+   again without `--dry-run` to apply them.
+
+Only threads the import created change. A title you renamed in T3 Code stays.
+Threads the file does not list keep their state unless you add
+`--unsettle-unlisted`. Running `apply` again changes nothing new, so run it again
+after importing more history. A worker whose parent was not imported stays at the
+top level; the next `apply` after that parent is imported nests it.

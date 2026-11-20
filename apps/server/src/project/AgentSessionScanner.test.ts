@@ -2420,6 +2420,53 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
       }),
     );
 
+    it.effect("allHistory reads past the 30-day window and the per-attempt cap in one pass", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-all-history-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-all-history-codex-");
+        const workspace = yield* makeTempDir("t3code-all-history-workspace-");
+        const sessionIds = Array.from(
+          { length: 102 },
+          (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        );
+        for (const [index, sessionId] of sessionIds.entries()) {
+          yield* writeTranscript({
+            filePath: path.join(claudeHomePath, "projects", "p", `${sessionId}.jsonl`),
+            contents: `${encodeTranscriptRecord({
+              type: "user",
+              cwd: workspace,
+              sessionId,
+              message: { role: "user", content: `Prompt ${index}` },
+            })}\n`,
+            // The last one is 40 days old.
+            mtimeMs: index === 101 ? nowMs - 40 * 24 * 60 * 60_000 : nowMs - (index + 1) * 60_000,
+          });
+        }
+
+        const importable = (options?: { readonly allHistory?: boolean }) =>
+          AgentSessionScanner.AgentSessionScanner.pipe(
+            Effect.flatMap((scanner) =>
+              scanner.recentThreads(workspace, [], options).pipe(Stream.runCollect),
+            ),
+            Effect.map((outcomes) =>
+              Array.from(outcomes).flatMap((outcome) =>
+                outcome._tag === "Importable" ? [outcome.source.providerSessionId] : [],
+              ),
+            ),
+          );
+        const [bounded, all] = yield* Effect.all([
+          importable(),
+          importable({ allHistory: true }),
+        ]).pipe(Effect.provide(layerScannerTest({ claudeHomePath, codexHomePath })));
+
+        expect(bounded).toHaveLength(100);
+        expect(all.toSorted()).toEqual(sessionIds);
+      }),
+    );
+
     it.effect("lists projects whose transcripts sit behind already-imported ones", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;

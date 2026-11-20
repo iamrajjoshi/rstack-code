@@ -226,7 +226,7 @@ const resolveProjectTitle = Effect.fn("resolveProjectTitle")(function* (
   return basename.length > 0 ? basename : "project";
 });
 
-const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (input: {
+export const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (input: {
   readonly snapshot: ProjectSnapshot;
   readonly identifier: string;
 }) {
