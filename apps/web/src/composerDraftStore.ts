@@ -413,6 +413,7 @@ const PersistedDraftThreadState = Schema.Struct({
   createdAt: Schema.String,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  coordinator: Schema.optionalKey(Schema.Boolean),
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   envMode: DraftThreadEnvModeSchema,
@@ -512,6 +513,8 @@ export interface DraftSessionState {
   createdAt: string;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  /** The thread is created as a coordinator. */
+  coordinator?: boolean;
   branch: string | null;
   worktreePath: string | null;
   envMode: DraftThreadEnvMode;
@@ -621,6 +624,7 @@ interface ComposerDraftStoreState {
       startFromOrigin?: boolean;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      coordinator?: boolean;
       environmentSelection?: "auto" | "manual";
       loadBalancedEnvironmentId?: EnvironmentId | null;
       checkoutPullRequest?: DraftCheckoutPullRequest | null;
@@ -1766,6 +1770,7 @@ function createDraftThreadState(
     runtimeMode: options?.runtimeMode ?? existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode:
       options?.interactionMode ?? existingThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
+    ...(existingThread?.coordinator ? { coordinator: true } : {}),
     branch: nextBranch,
     worktreePath: nextWorktreePath,
     envMode:
@@ -1982,6 +1987,7 @@ function normalizePersistedDraftThreads(
           candidateDraftThread.interactionMode === "default"
             ? candidateDraftThread.interactionMode
             : DEFAULT_INTERACTION_MODE,
+        ...(candidateDraftThread.coordinator === true ? { coordinator: true } : {}),
         branch: typeof branch === "string" ? branch : null,
         worktreePath: normalizedWorktreePath,
         envMode: normalizeDraftThreadEnvMode(candidateDraftThread.envMode, normalizedWorktreePath),
@@ -2761,6 +2767,7 @@ function toHydratedDraftThreadState(
     createdAt: persistedDraftThread.createdAt,
     runtimeMode: persistedDraftThread.runtimeMode,
     interactionMode: persistedDraftThread.interactionMode,
+    ...(persistedDraftThread.coordinator ? { coordinator: true } : {}),
     branch: persistedDraftThread.branch,
     worktreePath: persistedDraftThread.worktreePath,
     envMode: persistedDraftThread.envMode,
@@ -3059,6 +3066,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                   : options.createdAt || existing.createdAt,
               runtimeMode: options.runtimeMode ?? existing.runtimeMode,
               interactionMode: options.interactionMode ?? existing.interactionMode,
+              ...((options.coordinator ?? existing.coordinator) ? { coordinator: true } : {}),
               branch: nextBranch,
               worktreePath: nextWorktreePath,
               envMode:
@@ -3076,6 +3084,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftThread.createdAt === existing.createdAt &&
               nextDraftThread.runtimeMode === existing.runtimeMode &&
               nextDraftThread.interactionMode === existing.interactionMode &&
+              nextDraftThread.coordinator === existing.coordinator &&
               nextDraftThread.branch === existing.branch &&
               nextDraftThread.worktreePath === existing.worktreePath &&
               nextDraftThread.envMode === existing.envMode &&

@@ -36,6 +36,18 @@ export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `
 When browser work was asked, \`preview_*\` is the browser you share with the user: \`preview_status\` first, then \`preview_open\` if no tab can be automated. Prefer snapshot locators over coordinates. Switch browsers only if the tools are absent or \`preview_open\` says unsupported, the user asks, or two preview calls fail on one step. Then quote the error and switch.
 `;
 
+/** For threads the user marked as coordinators; `delegate_task` supplies the worker defaults. */
+export const T3_CODE_COORDINATOR_INSTRUCTIONS = `## T3 Code coordinator
+
+The user made this thread a coordinator: you plan, delegate, verify and report, and workers implement.
+
+- Delegate implementation with \`delegate_task\`. Omit \`target\` and \`isolation\` to get the user's worker defaults (model, effort, own worktree); set them only when the user names another model or setting. Pass \`coordinator:true\` only for a child that should split its work across workers of its own.
+- One worker per independent task, each in its own worktree and branch. Run independent workers in parallel; after a worker-limit error, wait for one to finish.
+- Give each worker a self-contained brief: the goal, the files or area, what done looks like, and what to report back (branch or PR, what changed, what it verified and what it did not).
+- Never do a worker's task yourself or give it to a second worker while it runs.
+- A worker's report is not proof. Read its diff and check its claims before you call the work done.
+- Roll results up for the user: each worker's status, its branch or PR, and what was not verified.`;
+
 const T3_CODE_DEVICE_TOOLS = ["device_list", "device_open", "device_screenshot", "device_close"];
 
 const deviceToolInstructions = (loadTools: string) => `## T3 Code devices

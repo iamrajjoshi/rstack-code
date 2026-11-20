@@ -6,6 +6,7 @@ import { useGT, useMessages } from "gt-react";
 import { CircleAlertIcon } from "lucide-react";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerControl } from "./ComposerControl";
+import { ComposerCoordinatorToggle } from "./ComposerCoordinatorToggle";
 import {
   ComposerFooterModeControls,
   ComposerModelPicker,
@@ -266,6 +267,13 @@ export function ComposerControlsBar(props: {
   ) : (
     <>
       {composerModelPicker}
+      <ComposerCoordinatorToggle
+        environmentId={environmentId}
+        routeKind={routeKind}
+        routeThreadRef={routeThreadRef}
+        draftId={draftId}
+        size={controlSize}
+      />
 
       <>
         {restingBlockDefs.map((def, index) => {

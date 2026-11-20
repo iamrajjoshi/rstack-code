@@ -330,6 +330,22 @@ its progress.
   stop the turn only when it is working on the goal. Other goal commands wait for
   the turn to end.
 
+## Coordinator threads
+
+The network button next to the model picker makes a thread, or the new thread
+you are drafting, a coordinator. With Claude and Codex, a coordinator plans and
+hands implementation to worker agents, each in its own worktree, then reports
+each worker's branch and what it did not verify. Workers are plain threads, not
+coordinators, unless the coordinator asks for one. A change applies from the next
+message; Claude restarts its session to pick it up.
+
+Workers default to Claude Opus 5.5 at medium effort in a new worktree, at most 6
+running at once, unless you name another model. Change these, and add standing
+instructions every worker receives (such as branch naming), with the
+`coordinatorWorkerModelSelection`, `coordinatorWorkerIsolation`,
+`coordinatorMaxParallelWorkers` and `coordinatorStandingInstructions` keys in
+the server's `settings.json`.
+
 ## Context in your message
 
 Context you attach lands where your cursor is, as a chip inside your text: a terminal excerpt,

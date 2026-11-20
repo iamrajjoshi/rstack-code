@@ -77,6 +77,39 @@ describe("fallbackTextGenerationModelSelection", () => {
       applyServerSettingsPatch(settings, { fallbackModelSelection: null }).fallbackModelSelection,
     ).toBeNull();
   });
+
+  it("defaults coordinator workers and replaces the worker model without its old options", () => {
+    const defaults = decodeServerSettings({});
+    expect(defaults.coordinatorWorkerModelSelection).toEqual({
+      instanceId: "claudeAgent",
+      model: "claude-opus-5-5",
+      options: [{ id: "effort", value: "medium" }],
+    });
+    expect(defaults.coordinatorWorkerIsolation).toBe("worktree");
+    expect(defaults.coordinatorMaxParallelWorkers).toBe(6);
+    expect(defaults.coordinatorStandingInstructions).toBe("");
+
+    const coordinatorWorkerModelSelection = {
+      instanceId: ProviderInstanceId.make("codex"),
+      model: "gpt-6.1-sol",
+    };
+    const patched = applyServerSettingsPatch(
+      defaults,
+      decodeServerSettingsPatch({
+        coordinatorWorkerModelSelection,
+        coordinatorWorkerIsolation: "shared",
+        coordinatorMaxParallelWorkers: 3,
+        coordinatorStandingInstructions: "  Name branches raj--<area>--<topic>.  ",
+      }),
+    );
+    expect(patched.coordinatorWorkerModelSelection).toEqual(coordinatorWorkerModelSelection);
+    expect(patched.coordinatorWorkerIsolation).toBe("shared");
+    expect(patched.coordinatorMaxParallelWorkers).toBe(3);
+    expect(patched.coordinatorStandingInstructions).toBe("Name branches raj--<area>--<topic>.");
+    const encodeServerSettings = Schema.encodeSync(ServerSettings);
+    expect(decodeServerSettings(encodeServerSettings(patched))).toEqual(patched);
+    expect(() => decodeServerSettingsPatch({ coordinatorMaxParallelWorkers: 0 })).toThrow();
+  });
   it("falls back to a configured non-default instance", () => {
     const configured = ProviderInstanceId.make("codex_work");
     const providerInstances = {

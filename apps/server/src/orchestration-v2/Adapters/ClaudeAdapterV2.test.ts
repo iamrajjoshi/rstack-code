@@ -87,7 +87,10 @@ import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.ts";
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
-import { T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH } from "@t3tools/provider-core/server/orchestrationInstructions";
+import {
+  T3_CODE_COORDINATOR_INSTRUCTIONS,
+  T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
+} from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
 import { HtmlToolkit } from "../../mcp/toolkits/html/tools.ts";
@@ -907,6 +910,31 @@ describe("ClaudeAdapterV2 device instructions", () => {
   it("leaves the device block out without device access or without T3 tools", () => {
     assert.notInclude(append({ mcp: true, deviceToolsAvailable: false }), "## T3 Code devices");
     assert.notInclude(append({ mcp: false, deviceToolsAvailable: true }), "## T3 Code devices");
+  });
+
+  it("appends the coordinator section only to a coordinator thread with T3 tools", () => {
+    const withRole = (coordinator: boolean | undefined, mcp = true) =>
+      (
+        ClaudeAdapterV2.makeClaudeQueryOptions({
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("claudeAgent"),
+            model: "claude-opus-5-5",
+          },
+          nativeThreadId: "native-thread-claude-coordinator",
+          resume: false,
+          cwd: "/workspace",
+          ...(mcp
+            ? { mcpServers: { "t3-code": { type: "http" as const, url: "http://127.0.0.1/mcp" } } }
+            : {}),
+          ...(coordinator === undefined ? {} : { coordinator }),
+          environment: {},
+        }).systemPrompt as { readonly append?: string }
+      ).append ?? "";
+    const plain = withRole(undefined);
+    assert.equal(withRole(true), `${plain}\n${T3_CODE_COORDINATOR_INSTRUCTIONS}\n`);
+    assert.equal(withRole(false), plain);
+    assert.notInclude(plain, "## T3 Code coordinator");
+    assert.notInclude(withRole(true, false), "## T3 Code coordinator");
   });
 
   it("gives native subagents the device block only in a session with device access", async () => {

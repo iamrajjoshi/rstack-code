@@ -544,6 +544,10 @@ export function applyServerSettingsPatch(
     ...(patch.providerInstances !== undefined
       ? { providerInstances: patch.providerInstances }
       : {}),
+    // A new worker model must not keep the old one's options.
+    ...(patch.coordinatorWorkerModelSelection !== undefined
+      ? { coordinatorWorkerModelSelection: patch.coordinatorWorkerModelSelection }
+      : {}),
     ...(patch.worktreesDirectory !== undefined &&
     patch.worktreesDirectory !== current.worktreesDirectory
       ? {

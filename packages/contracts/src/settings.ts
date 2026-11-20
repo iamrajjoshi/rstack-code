@@ -98,6 +98,18 @@ export const SidebarAutoSettleAfterDays = Schema.Number.check(
 export type SidebarAutoSettleAfterDays = typeof SidebarAutoSettleAfterDays.Type;
 const DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS: SidebarAutoSettleAfterDays = 7;
 
+export const CoordinatorWorkerIsolation = Schema.Literals(["worktree", "shared"]);
+export type CoordinatorWorkerIsolation = typeof CoordinatorWorkerIsolation.Type;
+const MAX_COORDINATOR_PARALLEL_WORKERS = 20;
+export const CoordinatorMaxParallelWorkers = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: MAX_COORDINATOR_PARALLEL_WORKERS }),
+);
+const DEFAULT_COORDINATOR_WORKER_MODEL_SELECTION: ModelSelection = {
+  instanceId: ProviderInstanceId.make("claudeAgent"),
+  model: "claude-opus-5-5",
+  options: [{ id: "effort", value: "medium" }],
+};
+
 export const MAX_SNOOZE_PRESET_MINUTES = 30 * 24 * 60;
 export const MAX_SNOOZE_PRESETS = 8;
 export const SnoozePresetDay = Schema.Literals([
@@ -1561,6 +1573,20 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   reviewGuideInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** Worker defaults `delegate_task` applies in coordinator threads. */
+  coordinatorWorkerModelSelection: ModelSelection.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_COORDINATOR_WORKER_MODEL_SELECTION)),
+  ),
+  coordinatorWorkerIsolation: CoordinatorWorkerIsolation.pipe(
+    Schema.withDecodingDefault(Effect.succeed("worktree" as const)),
+  ),
+  coordinatorMaxParallelWorkers: CoordinatorMaxParallelWorkers.pipe(
+    Schema.withDecodingDefault(Effect.succeed(6)),
+  ),
+  /** Appended to every task a coordinator thread delegates. */
+  coordinatorStandingInstructions: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed("")),
+  ),
 
   pullRequestMergeMethod: Schema.NullOr(PullRequestMergeMethod).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -1956,6 +1982,10 @@ export const ServerSettingsPatch = Schema.Struct({
   reviewGuidesEnabled: Schema.optionalKey(Schema.Boolean),
   reviewGuideModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   reviewGuideInstructions: Schema.optionalKey(TrimmedString),
+  coordinatorWorkerModelSelection: Schema.optionalKey(ModelSelection),
+  coordinatorWorkerIsolation: Schema.optionalKey(CoordinatorWorkerIsolation),
+  coordinatorMaxParallelWorkers: Schema.optionalKey(CoordinatorMaxParallelWorkers),
+  coordinatorStandingInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
   observability: Schema.optionalKey(
     Schema.Struct({

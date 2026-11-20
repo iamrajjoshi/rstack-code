@@ -98,6 +98,7 @@ export interface ThreadLaunchInput {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
+  readonly coordinator?: boolean;
   readonly workspaceStrategy: ThreadLaunchWorkspaceStrategy;
   readonly initialMessage?: ThreadLaunchInitialMessage;
   readonly importedNativeThread?: {
@@ -1363,6 +1364,7 @@ const make = Effect.gen(function* () {
                 commandId: input.commandId,
                 threadId: candidateThreadId,
                 expectedEmpty: true,
+                ...(input.coordinator === undefined ? {} : { coordinator: input.coordinator }),
               })
             : threads.dispatch({
                 type: "thread.create",
@@ -1373,6 +1375,7 @@ const make = Effect.gen(function* () {
                 modelSelection: input.modelSelection,
                 runtimeMode: input.runtimeMode,
                 interactionMode: input.interactionMode,
+                ...(input.coordinator === true ? { coordinator: true } : {}),
                 branch: initialBranch,
                 worktreePath: initialWorktreePath,
                 ...(input.importedNativeThread === undefined

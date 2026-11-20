@@ -199,6 +199,12 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
     }),
   ),
   interactionMode: Schema.optional(OrchestratorMcpInteractionMode),
+  coordinator: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "Coordinator threads only. true: the child coordinates its own workers. Default: a plain worker.",
+    }),
+  ),
 });
 export type OrchestratorMcpDelegateTaskInput = typeof OrchestratorMcpDelegateTaskInput.Type;
 

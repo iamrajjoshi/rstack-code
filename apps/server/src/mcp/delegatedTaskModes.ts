@@ -87,6 +87,45 @@ export function resolveInteractionMode(
     : Effect.succeed(resolved);
 }
 
+/**
+ * A coordinator's task with the user's worker defaults filling in what the agent left out.
+ * A target that names a provider or model keeps its own options; only options alone get the
+ * default provider and model.
+ */
+export function withCoordinatorDefaults(
+  input: OrchestratorMcpDelegateTaskInput,
+  defaults: {
+    readonly modelSelection: ModelSelection;
+    readonly isolation: "worktree" | "shared";
+    readonly standingInstructions: string;
+  },
+): OrchestratorMcpDelegateTaskInput {
+  const target = input.target;
+  const namesTarget =
+    target?.providerInstanceId !== undefined ||
+    target?.driverKind !== undefined ||
+    target?.model !== undefined;
+  const defaultOptions = defaults.modelSelection.options;
+  return {
+    ...input,
+    target: namesTarget
+      ? target
+      : {
+          ...target,
+          providerInstanceId: defaults.modelSelection.instanceId,
+          model: defaults.modelSelection.model,
+          ...(target?.options === undefined && defaultOptions !== undefined
+            ? { options: defaultOptions }
+            : {}),
+        },
+    isolation: input.isolation ?? defaults.isolation,
+    task:
+      defaults.standingInstructions === ""
+        ? input.task
+        : `${input.task}\n\nStanding instructions from the user:\n${defaults.standingInstructions}`,
+  };
+}
+
 /** The task as its child receives it, with the role the caller asked for. */
 export function taskPrompt(input: OrchestratorMcpDelegateTaskInput): string {
   return input.role === undefined || input.role === "general"

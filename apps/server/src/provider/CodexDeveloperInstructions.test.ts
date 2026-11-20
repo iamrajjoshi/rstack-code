@@ -1,6 +1,9 @@
 import * as NodeAssert from "node:assert/strict";
 
-import { T3_CODE_DEVICE_TOOL_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
+import {
+  T3_CODE_COORDINATOR_INSTRUCTIONS,
+  T3_CODE_DEVICE_TOOL_INSTRUCTIONS,
+} from "@t3tools/provider-core/server/orchestrationInstructions";
 import { describe, it } from "vite-plus/test";
 
 import {
@@ -15,7 +18,7 @@ describe("buildCodexAdditionalContext", () => {
     it.each([undefined, { browser: true, device: true }])(
       "keeps every entry within Codex's per-entry cap with tools %j",
       (availability) => {
-        const context = buildCodexAdditionalContext(runtime, availability);
+        const context = buildCodexAdditionalContext(runtime, availability, true);
 
         for (const [key, entry] of Object.entries(context)) {
           // Codex counts ceil(UTF-8 bytes / 4) tokens, excluding keys and wrappers.
@@ -64,6 +67,21 @@ describe("Codex orchestration context", () => {
     NodeAssert.ok(!orchestration.includes("Prefer native"));
     // The ACP terminal fallback is ACP-only; Codex agents never need it.
     NodeAssert.ok(!orchestration.includes("acp-mcp-call"));
+  });
+});
+
+describe("Codex coordinator context", () => {
+  it("adds the coordinator entry only for a coordinator thread", () => {
+    const runtime = { model: "gpt-6.1-sol" };
+    const plain = buildCodexAdditionalContext(runtime, true);
+    const coordinator = buildCodexAdditionalContext(runtime, true, true);
+
+    NodeAssert.deepEqual(buildCodexAdditionalContext(runtime, true, false), plain);
+    NodeAssert.ok(!JSON.stringify(plain).includes("## T3 Code coordinator"));
+    NodeAssert.deepEqual(coordinator, {
+      ...plain,
+      t3_code_coordinator: { kind: "application", value: T3_CODE_COORDINATOR_INSTRUCTIONS },
+    });
   });
 });
 

@@ -537,6 +537,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
   lastTitleRegeneration: Schema.optional(Schema.NullOr(OrchestrationV2LastTitleRegeneration)),
   /** Set by a rename until a generated title replaces it; absent reads as false. */
   titleRenamed: Schema.optional(Schema.Boolean),
+  /** Coordinator threads delegate implementation to workers; absent reads as false. */
+  coordinator: Schema.optional(Schema.Boolean),
   rollbackRequestId: Schema.optional(CommandId),
   rollbackFailure: Schema.optional(
     Schema.NullOr(
@@ -3146,6 +3148,7 @@ export const OrchestrationV2Command = Schema.Union([
     interactionMode: ProviderInteractionMode,
     branch: Schema.NullOr(TrimmedNonEmptyString),
     worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+    coordinator: Schema.optional(Schema.Boolean),
     /** Only the server sets this; a client's thread.create never carries one. */
     linkOrigin: Schema.optional(OrchestrationV2LinkOrigin),
     /** Only the server sets this, with `linkOrigin`, for a linked environment's delegated task. */
@@ -3308,6 +3311,7 @@ export const OrchestrationV2Command = Schema.Union([
     limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecoveryUpdate)),
     /** Link (object) or unlink (null) a pull request; absent leaves it unchanged. */
     linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+    coordinator: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pull-request.link"),
@@ -3607,6 +3611,8 @@ export const OrchestrationV2Command = Schema.Union([
     runtimeMode: RuntimeMode,
     interactionMode: ProviderInteractionMode,
     workspaceStrategy: Schema.optional(OrchestrationV2ThreadLaunchWorkspaceStrategy),
+    /** The child is a sub-coordinator; absent makes it a plain worker. */
+    coordinator: Schema.optional(Schema.Boolean),
     // Defaults to settled_only; fire-and-forget wakes require always.
     completionWake: Schema.optional(Schema.Literals(["always", "settled_only"])),
     createdAt: Schema.optional(Schema.DateTimeUtc),
@@ -3969,6 +3975,7 @@ export const OrchestrationV2ThreadLaunchInput = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  coordinator: Schema.optional(Schema.Boolean),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
   initialMessage: Schema.optional(
     Schema.Struct({

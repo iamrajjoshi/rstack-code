@@ -133,6 +133,7 @@ import {
   resolveRuntimeMode,
   runtimeModeRank,
   taskPrompt,
+  withCoordinatorDefaults,
 } from "./delegatedTaskModes.ts";
 import { assertTargetWithinLimits, isLiveCallerShell, threadNotFound } from "./threadAccess.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
@@ -2766,6 +2767,27 @@ const make = Effect.gen(function* () {
           : readTask(scope, taskId, false, true);
       }
       const { scope, parent } = yield* loadThreadCaller(callerScope, "delegate_task");
+      const coordinatorSettings =
+        parent.thread.coordinator === true
+          ? yield* serverSettings.getSettings.pipe(
+              Effect.mapError(() =>
+                failure("orchestration_error", "Unable to read server settings."),
+              ),
+            )
+          : undefined;
+      if (coordinatorSettings === undefined && input.coordinator === true) {
+        return yield* failure(
+          "invalid_request",
+          "Only a coordinator thread can start a sub-coordinator. Omit `coordinator`.",
+        );
+      }
+      if (coordinatorSettings !== undefined) {
+        input = withCoordinatorDefaults(input, {
+          modelSelection: coordinatorSettings.coordinatorWorkerModelSelection,
+          isolation: coordinatorSettings.coordinatorWorkerIsolation,
+          standingInstructions: coordinatorSettings.coordinatorStandingInstructions,
+        });
+      }
       if (
         input.target?.projectId !== undefined &&
         input.target.projectId !== parent.thread.projectId
@@ -2796,6 +2818,33 @@ const make = Effect.gen(function* () {
         operation: "delegate-task",
       });
       const isRetryOfAcceptedDelegation = yield* threadManagement.hasReceipt(commandId);
+      if (coordinatorSettings !== undefined && !isRetryOfAcceptedDelegation) {
+        const maxWorkers = coordinatorSettings.coordinatorMaxParallelWorkers;
+        const childThreadIds = yield* threadManagement
+          .listAppOwnedChildThreadIds(parent.thread.id)
+          .pipe(Effect.mapError(threadManagementFailure));
+        const childShells = yield* Effect.forEach(
+          childThreadIds,
+          (childThreadId) =>
+            threadManagement
+              .getThreadShell(childThreadId)
+              .pipe(Effect.mapError(threadManagementFailure)),
+          { concurrency: "unbounded" },
+        );
+        const runningWorkers = childShells.filter(
+          (shell) =>
+            shell !== null &&
+            shell.deletedAt === null &&
+            shell.status !== "idle" &&
+            !ThreadManagementService.isTerminalRunStatus(shell.status),
+        ).length;
+        if (runningWorkers >= maxWorkers) {
+          return yield* failure(
+            "invalid_request",
+            `This coordinator already has ${runningWorkers} running workers, its limit of ${maxWorkers}. Wait for one to finish (its completion wakes you), or task_cancel one you no longer need, then delegate again.`,
+          );
+        }
+      }
       const target = yield* resolveTargetRechecking({
         parent,
         target: input.target,
@@ -2859,6 +2908,7 @@ const make = Effect.gen(function* () {
           modelSelection: target.modelSelection,
           runtimeMode,
           interactionMode,
+          ...(input.coordinator === true ? { coordinator: true } : {}),
           ...(workspaceStrategy === undefined ? {} : { workspaceStrategy }),
           // Async delegations wake the parent on every child terminal; wait
           // delegations deliver through the blocking tool call until `awaitTask`

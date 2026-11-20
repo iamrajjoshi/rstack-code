@@ -76,7 +76,7 @@ import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
 import { idleThreadProjection, liveThreadShell } from "./McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
-import { resolveRuntimeMode } from "./delegatedTaskModes.ts";
+import { resolveRuntimeMode, withCoordinatorDefaults } from "./delegatedTaskModes.ts";
 import type { ProjectionRecordFilter } from "../orchestration-v2/ProjectionStore.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
@@ -2697,6 +2697,221 @@ describe("OrchestratorMcpService provider resolution", () => {
       assert.equal(error.message, "Unable to create delegated task: refused by the orchestrator");
     }),
   );
+
+  describe("from a coordinator thread", () => {
+    const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
+    const runningChildId = ThreadId.make("thread:mcp-coordinator-running");
+    const idleChildId = ThreadId.make("thread:mcp-coordinator-idle");
+    const coordinatorProjection = (coordinator: boolean) => {
+      const projection = parentProjection([]);
+      return {
+        ...projection,
+        thread: { ...projection.thread, ...(coordinator ? { coordinator: true } : {}) },
+      } as OrchestrationV2ThreadProjection;
+    };
+    const delegate = (input: {
+      readonly coordinator: boolean;
+      readonly runningChildren: number;
+      readonly request: Partial<
+        Parameters<OrchestratorMcpService.OrchestratorMcpServiceShape["delegateTask"]>[1]
+      >;
+    }) =>
+      Effect.gen(function* () {
+        const commands: Array<Record<string, unknown>> = [];
+        const children = [
+          ...Array.from({ length: input.runningChildren }, (_, index) =>
+            ThreadId.make(`${runningChildId}-${index}`),
+          ),
+          idleChildId,
+        ];
+        const layerDependencies = Layer.mergeAll(
+          NodeServices.layer,
+          NodeCrypto.layer,
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            hasReceipt: () => Effect.succeed(false),
+            getThreadRecords: () => Effect.succeed(coordinatorProjection(input.coordinator)),
+            listAppOwnedChildThreadIds: () => Effect.succeed(children),
+            getThreadShell: (threadId) =>
+              Effect.succeed({
+                id: threadId,
+                deletedAt: null,
+                status: threadId === idleChildId ? "completed" : "running",
+              } as never),
+            dispatch: (command) =>
+              Effect.sync(() => commands.push(command as never)).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new OrchestratorDispatchError({
+                      commandId: command.commandId,
+                      commandType: command.type,
+                      cause: new Error("captured"),
+                    }) as never,
+                  ),
+                ),
+              ),
+          }),
+          ServerSettings.layerTest({
+            coordinatorWorkerIsolation: "shared",
+            coordinatorMaxParallelWorkers: 2,
+            coordinatorStandingInstructions: "Name branches raj--<area>--<topic>.",
+          }),
+          providerRegistryLayer([
+            providerSnapshot({
+              instanceId: codexInstanceId,
+              driver: ProviderDriverKind.make("codex"),
+              model: "gpt-5.4",
+            }),
+            {
+              ...providerSnapshot({
+                instanceId: claudeInstanceId,
+                driver: ProviderDriverKind.make("claudeAgent"),
+              }),
+              models: [
+                {
+                  slug: "claude-opus-5-5",
+                  name: "Opus 5.5",
+                  isCustom: false,
+                  capabilities: {
+                    optionDescriptors: [
+                      {
+                        id: "effort",
+                        label: "Effort",
+                        type: "select",
+                        options: [
+                          { id: "medium", label: "Medium" },
+                          { id: "high", label: "High", isDefault: true },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ]),
+          adapterRegistryLayer([codexInstanceId, claudeInstanceId]),
+          Layer.mock(ProjectService.ProjectService)({ getById: () => Effect.succeedNone }),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(RemoteDelegation.RemoteDelegation)({}),
+          Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+        );
+        const error = yield* Effect.gen(function* () {
+          const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+          return yield* service
+            .delegateTask(scope, {
+              task: "Fix the flaky test.",
+              mode: "async",
+              clientRequestId: "delegate-coordinator",
+              ...input.request,
+            })
+            .pipe(Effect.flip);
+        }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
+        return { error, command: commands[0] };
+      });
+
+    it.effect("fills in the worker defaults and standing instructions the agent left out", () =>
+      Effect.gen(function* () {
+        const { command } = yield* delegate({
+          coordinator: true,
+          runningChildren: 1,
+          request: { coordinator: true },
+        });
+        assert.deepEqual(command?.modelSelection, {
+          instanceId: claudeInstanceId,
+          model: "claude-opus-5-5",
+          options: [{ id: "effort", value: "medium" }],
+        });
+        assert.equal(
+          command?.task,
+          "Fix the flaky test.\n\nStanding instructions from the user:\nName branches raj--<area>--<topic>.",
+        );
+        assert.equal(command?.coordinator, true);
+        assert.isUndefined(command?.workspaceStrategy);
+      }),
+    );
+
+    it.effect("keeps a model the agent names, without the default's options", () =>
+      Effect.gen(function* () {
+        const { command } = yield* delegate({
+          coordinator: true,
+          runningChildren: 0,
+          request: { target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" } },
+        });
+        assert.deepEqual(command?.modelSelection, {
+          instanceId: codexInstanceId,
+          model: "gpt-5.4",
+        });
+        assert.isUndefined(command?.coordinator);
+      }),
+    );
+
+    it.effect("refuses a worker past the parallel limit without dispatching it", () =>
+      Effect.gen(function* () {
+        const { error, command } = yield* delegate({
+          coordinator: true,
+          runningChildren: 2,
+          request: {},
+        });
+        assert.equal(error.code, "invalid_request");
+        assert.include(error.message, "already has 2 running workers, its limit of 2");
+        assert.isUndefined(command);
+      }),
+    );
+
+    it.effect("leaves a plain thread's delegation alone and refuses it a sub-coordinator", () =>
+      Effect.gen(function* () {
+        const plain = yield* delegate({ coordinator: false, runningChildren: 5, request: {} });
+        assert.deepEqual(plain.command?.modelSelection, {
+          instanceId: codexInstanceId,
+          model: "gpt-5.4",
+        });
+        assert.equal(plain.command?.task, "Fix the flaky test.");
+        const refused = yield* delegate({
+          coordinator: false,
+          runningChildren: 0,
+          request: { coordinator: true },
+        });
+        assert.equal(refused.error.code, "invalid_request");
+        assert.isUndefined(refused.command);
+      }),
+    );
+
+    it("defaults isolation and gives options alone the default provider and model", () => {
+      const defaults = {
+        modelSelection: {
+          instanceId: claudeInstanceId,
+          model: "claude-opus-5-5",
+          options: [{ id: "effort", value: "medium" }],
+        },
+        isolation: "worktree" as const,
+        standingInstructions: "",
+      };
+      assert.deepEqual(withCoordinatorDefaults({ task: "Fix it." }, defaults), {
+        task: "Fix it.",
+        target: {
+          providerInstanceId: claudeInstanceId,
+          model: "claude-opus-5-5",
+          options: [{ id: "effort", value: "medium" }],
+        },
+        isolation: "worktree",
+      });
+      const highEffort = [{ id: "effort", value: "high" }];
+      assert.deepEqual(
+        withCoordinatorDefaults(
+          { task: "Fix it.", target: { options: highEffort }, isolation: "shared" },
+          defaults,
+        ),
+        {
+          task: "Fix it.",
+          target: {
+            options: highEffort,
+            providerInstanceId: claudeInstanceId,
+            model: "claude-opus-5-5",
+          },
+          isolation: "shared",
+        },
+      );
+    });
+  });
 
   it.effect.each([
     { failingType: "thread.create", prefix: "Unable to create thread 1: " },

@@ -149,6 +149,7 @@ export interface UpdateThreadMetadataInput extends ThreadCommandInput {
   readonly regenerateTitle?: boolean;
   readonly linkedPullRequest?: ThreadLinkedPullRequest | null;
   readonly expectedEmpty?: boolean;
+  readonly coordinator?: boolean;
 }
 
 export interface SetThreadRuntimeModeInput extends ThreadCommandInput {
@@ -166,6 +167,7 @@ interface StartThreadBootstrap {
     readonly modelSelection: ModelSelection;
     readonly runtimeMode: RuntimeMode;
     readonly interactionMode: ProviderInteractionMode;
+    readonly coordinator?: boolean;
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly createdAt: string;
@@ -697,7 +699,8 @@ export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadM
       input.worktreePath !== undefined ||
       input.regenerateTitle !== undefined ||
       input.linkedPullRequest !== undefined ||
-      input.limitRecovery !== undefined
+      input.limitRecovery !== undefined ||
+      input.coordinator !== undefined
     ) {
       result = yield* dispatch({
         type: "thread.metadata.update",
@@ -712,6 +715,7 @@ export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadM
         ...(input.linkedPullRequest === undefined
           ? {}
           : { linkedPullRequest: input.linkedPullRequest }),
+        ...(input.coordinator === undefined ? {} : { coordinator: input.coordinator }),
       });
     }
     if (input.modelSelection !== undefined) {
@@ -805,6 +809,7 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
       modelSelection: input.modelSelection ?? thread.modelSelection,
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
+      ...(bootstrap?.coordinator === true ? { coordinator: true } : {}),
       workspaceStrategy,
       initialMessage: {
         messageId: input.message.messageId,

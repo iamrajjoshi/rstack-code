@@ -214,6 +214,7 @@ import {
 } from "../../provider/claudeUsageLimits.ts";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import {
+  T3_CODE_COORDINATOR_INSTRUCTIONS,
   T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
@@ -2263,6 +2264,8 @@ export function makeClaudeQueryOptions(input: {
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
   /** The thread's T3 MCP session holds the `device` capability. */
   readonly deviceToolsAvailable?: boolean;
+  /** The user marked the thread as a coordinator. */
+  readonly coordinator?: boolean;
   readonly tools?: ClaudeAgentSdkQueryTools;
   readonly allowedTools?: ReadonlyArray<string>;
   readonly disallowedTools?: ReadonlyArray<string>;
@@ -2427,7 +2430,8 @@ export function makeClaudeQueryOptions(input: {
               CLAUDE_SEND_TO_USER_INSTRUCTIONS +
               (deviceInstructions
                 ? `\n${T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH}\n`
-                : "")),
+                : "") +
+              (input.coordinator === true ? `\n${T3_CODE_COORDINATOR_INSTRUCTIONS}\n` : "")),
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
@@ -12957,7 +12961,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               ? {}
               : { allowedTools: queryPolicy.allowedTools }),
           });
-          const queryPolicyKey = claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides);
+          const coordinator = turnInput.appThread.coordinator === true;
+          // The system prompt carries the coordinator section, so a toggle reopens the query.
+          const queryPolicyKey = `${claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides)}${coordinator ? ":coordinator" : ""}`;
           const resumeSessionAt = yield* getNativeConversationHeadId(turnInput.providerThread);
           const existing = yield* Ref.get(queryContext);
           // Continuations drain existing output without prompting; retain the live process regardless of selection.
@@ -13114,6 +13120,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               ? {}
               : { mcpServers: mcpOverrides.mcpServers }),
             deviceToolsAvailable: mcpSession?.capabilities?.has("device") === true,
+            coordinator,
             permissionMode: queryPolicy.permissionMode,
             ...(queryPolicy.allowDangerouslySkipPermissions === undefined
               ? {}

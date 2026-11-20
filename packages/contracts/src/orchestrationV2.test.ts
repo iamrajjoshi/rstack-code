@@ -12,7 +12,9 @@ import {
 } from "./index.ts";
 import {
   latestProviderTurnForAttempt,
+  OrchestrationV2AppThreadJson,
   OrchestrationV2CheckpointFileSummary,
+  OrchestrationV2Command,
   OrchestrationV2ProviderCapabilities,
   OrchestrationV2ProviderThread,
   OrchestrationV2ProviderThreadJson,
@@ -503,6 +505,60 @@ describe("thread open stats", () => {
     const opens = { openedAt: 1, score: 1, picks: [{ query: "upl", at: 1 }] };
     expect(decode({ ...shell, opens }).opens).toEqual(opens);
     expect(decode({ ...shell, opens: { openedAt: "2026-10-01", score: 1 } }).opens).toBeNull();
+  });
+});
+
+describe("coordinator role", () => {
+  it("reads threads stored before the role as plain threads and keeps the role through a round trip", () => {
+    const thread = {
+      id: "thread-test",
+      projectId: "project-test",
+      title: "Thread",
+      providerInstanceId: "codex",
+      modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      activeProviderThreadId: null,
+      lineage: { rootThreadId: "thread-test", parentThreadId: null, relationshipToParent: null },
+      forkedFrom: null,
+      createdBy: "user",
+      creationSource: "web",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+      archivedAt: null,
+      deletedAt: null,
+    };
+    const decode = Schema.decodeUnknownSync(OrchestrationV2AppThreadJson);
+    const encode = Schema.encodeSync(OrchestrationV2AppThreadJson);
+    expect(decode(thread).coordinator).toBeUndefined();
+    const coordinator = decode({ ...thread, coordinator: true });
+    expect(coordinator.coordinator).toBe(true);
+    expect(decode(encode(coordinator))).toEqual(coordinator);
+  });
+
+  it("carries the role on metadata updates and launches", () => {
+    const decodeCommand = Schema.decodeUnknownSync(OrchestrationV2Command);
+    const metadata = decodeCommand({
+      type: "thread.metadata.update",
+      commandId: "command-test",
+      threadId: "thread-test",
+      coordinator: false,
+    });
+    expect(metadata.type === "thread.metadata.update" && metadata.coordinator).toBe(false);
+    const decodeLaunch = Schema.decodeUnknownSync(OrchestrationV2RpcSchemas.launchThread.input);
+    const launch = decodeLaunch({
+      commandId: "command-test",
+      projectId: "project-test",
+      title: "Thread",
+      modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      coordinator: true,
+      workspaceStrategy: { type: "root" },
+    });
+    expect(launch.coordinator).toBe(true);
   });
 });
 
