@@ -37,7 +37,7 @@ const makeEnvironment = (path: Path.Path, overrides: Record<string, unknown> = {
     isPackaged: true,
     isDevelopment: false,
     displayName: "T3 Code (Alpha)",
-    linuxDesktopEntryName: "com.t3tools.T3Code.desktop",
+    linuxDesktopEntryName: "com.iamrajjoshi.RstackCode.desktop",
     linuxApplicationsDir: "/home/alice/.local/share/applications",
     desktopLauncherPath: Option.none(),
     appImagePath: Option.some("/home/alice/Applications/T3-Code.AppImage"),
@@ -188,7 +188,7 @@ describe("DesktopLinuxUrlHandler", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
       displayName: "T3 Code (Nightly)",
       execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
-      scheme: "t3code",
+      scheme: "rstackcode",
       iconPath: "/home/al ice/icons/T3\\x.png",
     });
 
@@ -200,7 +200,7 @@ describe("DesktopLinuxUrlHandler", () => {
     );
     assert.include(entry, "NoDisplay=true");
     assert.notInclude(entry, "StartupWMClass=");
-    assert.include(entry, "MimeType=x-scheme-handler/t3code;");
+    assert.include(entry, "MimeType=x-scheme-handler/rstackcode;");
     assert.include(entry, "Icon=/home/al ice/icons/T3\\\\x.png");
   });
 
@@ -221,7 +221,7 @@ describe("DesktopLinuxUrlHandler", () => {
       const previousEntry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
         displayName: "T3 Code (Beta)",
         execTarget: previous,
-        scheme: "t3code",
+        scheme: "rstackcode",
       });
       assert.equal(
         DesktopLinuxUrlHandler.replacedVersionedAppImagePath({
@@ -245,13 +245,13 @@ describe("DesktopLinuxUrlHandler", () => {
         assert.equal(recorded.files.length, 1);
         assert.equal(
           recorded.files[0]?.path,
-          "/home/alice/.local/share/applications/com.t3tools.T3Code.desktop",
+          "/home/alice/.local/share/applications/com.iamrajjoshi.RstackCode.desktop",
         );
         assert.include(
           recorded.files[0]?.content,
           "Exec=/home/alice/Applications/T3-Code.AppImage %U",
         );
-        assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/t3code;");
+        assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/rstackcode;");
         assert.deepEqual(recorded.commands, [
           {
             command: "update-desktop-database",
@@ -259,7 +259,7 @@ describe("DesktopLinuxUrlHandler", () => {
           },
           {
             command: "xdg-mime",
-            args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/t3code"],
+            args: ["default", "com.iamrajjoshi.RstackCode.desktop", "x-scheme-handler/rstackcode"],
           },
         ]);
       });
@@ -277,8 +277,8 @@ describe("DesktopLinuxUrlHandler", () => {
         DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
           displayName: "T3 Code (Alpha)",
           execTarget: process.execPath,
-          scheme: "t3code",
-          iconPath: "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png",
+          scheme: "rstackcode",
+          iconPath: "/home/alice/.local/share/icons/com.iamrajjoshi.RstackCode.desktop.png",
         }),
       );
     });
@@ -304,8 +304,8 @@ describe("DesktopLinuxUrlHandler", () => {
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
           displayName: "T3 Code (Alpha)",
           execTarget: "/home/alice/Applications/T3-Code.AppImage",
-          scheme: "t3code",
-          iconPath: "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png",
+          scheme: "rstackcode",
+          iconPath: "/home/alice/.local/share/icons/com.iamrajjoshi.RstackCode.desktop.png",
         }),
       });
 
@@ -318,7 +318,7 @@ describe("DesktopLinuxUrlHandler", () => {
         },
         {
           command: "xdg-mime",
-          args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/t3code"],
+          args: ["default", "com.iamrajjoshi.RstackCode.desktop", "x-scheme-handler/rstackcode"],
         },
       ]);
     });
@@ -326,14 +326,14 @@ describe("DesktopLinuxUrlHandler", () => {
 
   it.effect("installs a persistent icon even when the desktop entry is already current", () => {
     const recorded = emptyRecording();
-    const iconPath = "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png";
+    const iconPath = "/home/alice/.local/share/icons/com.iamrajjoshi.RstackCode.desktop.png";
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
         iconSource: "/tmp/.mount_T3/resources/icon.png",
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
           displayName: "T3 Code (Alpha)",
           execTarget: "/home/alice/Applications/T3-Code.AppImage",
-          scheme: "t3code",
+          scheme: "rstackcode",
           iconPath,
         }),
       });
@@ -373,14 +373,14 @@ describe("DesktopLinuxUrlHandler", () => {
       yield* runRegister(unpackaged, {
         environment: {
           isPackaged: false,
-          linuxDesktopEntryName: "com.t3tools.T3Code.Development.desktop",
+          linuxDesktopEntryName: "com.iamrajjoshi.RstackCode.Development.desktop",
         },
       });
 
       assert.deepEqual(nonLinux.files, []);
       assert.equal(
         unpackaged.files[0]?.path,
-        "/home/alice/.local/share/applications/com.t3tools.T3Code.Development.desktop",
+        "/home/alice/.local/share/applications/com.iamrajjoshi.RstackCode.Development.desktop",
       );
       assert.deepEqual(unpackaged.commands, []);
     });
@@ -400,7 +400,8 @@ describe("DesktopLinuxUrlHandler", () => {
           module: "FileSystem",
           method: "writeFileString",
           description: "read-only filesystem",
-          pathOrDescriptor: "/home/alice/.local/share/applications/com.t3tools.T3Code.desktop",
+          pathOrDescriptor:
+            "/home/alice/.local/share/applications/com.iamrajjoshi.RstackCode.desktop",
         }),
       });
 
@@ -615,17 +616,17 @@ it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
 
       yield* registerWithRealFileSystem(run);
       assert.deepEqual([...(yield* fileSystem.readDirectory(fixture.appsDir))].sort(), [
-        "com.t3tools.T3Code.png",
-        "com.t3tools.t3code.png",
+        "com.iamrajjoshi.RstackCode.png",
+        "com.iamrajjoshi.rstackcode.png",
       ]);
-      for (const name of ["com.t3tools.t3code", "com.t3tools.T3Code"]) {
+      for (const name of ["com.iamrajjoshi.rstackcode", "com.iamrajjoshi.RstackCode"]) {
         const target = path.join(fixture.appsDir, `${name}.png`);
         assert.deepEqual([...(yield* fileSystem.readFile(target))], [...icon]);
         yield* fileSystem.utimes(target, fixture.pastSeconds, fixture.pastSeconds);
       }
 
       yield* registerWithRealFileSystem(run);
-      for (const name of ["com.t3tools.t3code", "com.t3tools.T3Code"]) {
+      for (const name of ["com.iamrajjoshi.rstackcode", "com.iamrajjoshi.RstackCode"]) {
         const info = yield* fileSystem.stat(path.join(fixture.appsDir, `${name}.png`));
         assert.equal(Option.getOrThrow(info.mtime).getTime(), fixture.pastSeconds * 1000);
       }
@@ -640,8 +641,8 @@ it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
       const path = yield* Path.Path;
       const fixture = yield* themeIconFixture(new Uint8Array([1, 2, 3]));
       yield* fixture.seedCache;
-      const lower = path.join(fixture.appsDir, "com.t3tools.t3code.png");
-      const upper = path.join(fixture.appsDir, "com.t3tools.T3Code.png");
+      const lower = path.join(fixture.appsDir, "com.iamrajjoshi.rstackcode.png");
+      const upper = path.join(fixture.appsDir, "com.iamrajjoshi.RstackCode.png");
       yield* fileSystem.writeFile(lower, new Uint8Array([3, 2, 1]));
       yield* fileSystem.writeFile(upper, new Uint8Array([1, 2, 3]));
       for (const target of [lower, upper]) {
@@ -682,7 +683,9 @@ it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
 
       yield* registerWithRealFileSystem(run);
 
-      assert.isTrue(yield* fileSystem.exists(path.join(fixture.appsDir, "com.t3tools.T3Code.png")));
+      assert.isTrue(
+        yield* fileSystem.exists(path.join(fixture.appsDir, "com.iamrajjoshi.RstackCode.png")),
+      );
       assert.equal(iconCacheRuns(run), 1);
     }),
   );

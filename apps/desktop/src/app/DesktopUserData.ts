@@ -39,9 +39,11 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    // rstack-code: its own profiles. T3 Code's legacy profiles are never adopted or copied, so
+    // each legacy name is the current one and the migration below has nothing to find.
     const names = input.isDevelopment
-      ? { current: "t3code-dev", legacy: "T3 Code (Dev)" }
-      : { current: "t3code-v2", legacy: "T3 Code (Alpha)" };
+      ? { current: "rstackcode-dev", legacy: "rstackcode-dev" }
+      : { current: "rstackcode", legacy: "rstackcode" };
     const destinationPath = path.join(input.appDataDirectory, names.current);
     const legacyPath = path.join(input.appDataDirectory, names.legacy);
     const inspect = (resourcePath: string) =>
@@ -62,7 +64,7 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
     const legacyState = path.join(legacyPath, "Local State");
     const sourceState = (yield* inspect(legacyState))
       ? legacyState
-      : path.join(input.appDataDirectory, "t3code", "Local State");
+      : path.join(input.appDataDirectory, names.current, "Local State");
     if (!(yield* inspect(sourceState))) return destinationPath;
     // Windows safeStorage keys live here. Copy only these preferences, never locked databases.
     const state = yield* fs

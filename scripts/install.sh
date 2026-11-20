@@ -8,7 +8,7 @@
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              T3 home directory (default: ~/.t3)
+#   T3CODE_HOME              T3 home directory (default: ~/.rstack)
 #   T3CODE_INSTALL_BIN_DIR   where the `t3` command goes (default: ~/.local/bin)
 #   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
@@ -19,7 +19,7 @@ set -eu
 
 repo="iamrajjoshi/rstack-code"
 base_url="${T3CODE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
-t3_home="${T3CODE_HOME:-$HOME/.t3}"
+t3_home="${T3CODE_HOME:-$HOME/.rstack}"
 case "$t3_home" in
   /*) ;;
   *)
@@ -54,11 +54,11 @@ step() {
 }
 if "$interactive"; then
   printf '\n%s' "$bold" >&2
-  printf '  %s\n' '██████████ ████████ ' >&2
-  printf '  %s\n' '    ███       ▄██▀       rstack code' >&2
-  printf '  %s%s     %sCLI installer%s\n' '    ███       ████▄ ' "$reset" "$muted" "$reset$bold" >&2
-  printf '  %s\n' '    ███    ▄     ███' >&2
-  printf '  %s\n' '    ███    ███████▀ ' >&2
+  printf '  %s\n' '███▄███▄    ▄█████▄ ' >&2
+  printf '  %s\n' '████▀ ▀▀   ███           rstack code' >&2
+  printf '  %s%s     %sCLI installer%s\n' '███        ▀█████▄  ' "$reset" "$muted" "$reset$bold" >&2
+  printf '  %s\n' '███             ███ ' >&2
+  printf '  %s\n' '███        ▀██████▀ ' >&2
   printf '%s\n' "$reset" >&2
 fi
 step "Finding your release..."

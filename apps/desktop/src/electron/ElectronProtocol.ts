@@ -12,12 +12,12 @@ import * as Scope from "effect/Scope";
 
 import * as Electron from "electron";
 
+import { DESKTOP_APP_DEVELOPMENT_SCHEME, DESKTOP_APP_SCHEME } from "@t3tools/shared/appIdentity";
+
 export const DESKTOP_HOST = "app";
-const DESKTOP_PRODUCTION_SCHEME = "t3code";
-const DESKTOP_DEVELOPMENT_SCHEME = "t3code-dev";
 
 export function getDesktopScheme(isDevelopment: boolean): string {
-  return isDevelopment ? DESKTOP_DEVELOPMENT_SCHEME : DESKTOP_PRODUCTION_SCHEME;
+  return isDevelopment ? DESKTOP_APP_DEVELOPMENT_SCHEME : DESKTOP_APP_SCHEME;
 }
 
 function getDesktopOrigin(isDevelopment: boolean): string {
@@ -111,7 +111,7 @@ function withContentSecurityPolicy(response: Response, policy: string): Response
 function registerDesktopSchemePrivilegesSync(): void {
   Electron.protocol.registerSchemesAsPrivileged([
     {
-      scheme: DESKTOP_PRODUCTION_SCHEME,
+      scheme: DESKTOP_APP_SCHEME,
       privileges: {
         standard: true,
         secure: true,
@@ -123,7 +123,7 @@ function registerDesktopSchemePrivilegesSync(): void {
       },
     },
     {
-      scheme: DESKTOP_DEVELOPMENT_SCHEME,
+      scheme: DESKTOP_APP_DEVELOPMENT_SCHEME,
       privileges: {
         standard: true,
         secure: true,

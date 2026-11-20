@@ -549,7 +549,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.equal(yield* homeFor("~someone/t3-dev"), path.resolve("~someone/t3-dev"));
         assert.equal(yield* homeFor("relative/t3-dev"), path.resolve("relative/t3-dev"));
         assert.equal(yield* homeFor("/tmp/t3-dev"), path.resolve("/tmp/t3-dev"));
-        // An explicit ~/.t3 would put state in the live userdata; leaving it implicit selects ~/.t3/dev.
+        // An explicit live home would put state in its userdata; leaving it implicit selects ~/.rstack/dev.
+        assert.equal(yield* homeFor("~/.rstack"), undefined);
+        assert.equal(yield* homeFor("/home/dev/.rstack/"), undefined);
+        // T3 Code's own home is live data too.
         assert.equal(yield* homeFor("~/.t3"), undefined);
         assert.equal(yield* homeFor("/home/dev/.t3/"), undefined);
       }),

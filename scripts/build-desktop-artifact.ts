@@ -15,6 +15,11 @@ import {
   type DirectoryRecord,
 } from "@electron/asar";
 
+import {
+  DESKTOP_APP_DEVELOPMENT_SCHEME,
+  DESKTOP_APP_SCHEME,
+  LINUX_DESKTOP_APP_ID,
+} from "@t3tools/shared/appIdentity";
 import { fromYaml } from "@t3tools/shared/schemaYaml";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { clerkFrontendApiHostnameFromPublishableKey } from "@t3tools/shared/relayAuth";
@@ -66,6 +71,7 @@ const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
 // rstack-code: its own app id installs alongside T3 Code, and its own feed never offers upstream releases.
 const DESKTOP_APP_ID = "com.iamrajjoshi.rstackcode";
 const DEFAULT_DESKTOP_UPDATE_REPOSITORY = "iamrajjoshi/rstack-code";
+const LINUX_EXECUTABLE_NAME = "rstackcode";
 const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -2876,7 +2882,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       protocols: [
         {
           name: "rstack code",
-          schemes: ["t3code", "t3code-dev"],
+          schemes: [DESKTOP_APP_SCHEME, DESKTOP_APP_DEVELOPMENT_SCHEME],
         },
         {
           name: "Web site URL",
@@ -2921,21 +2927,22 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.afterPack = path.join(repoRoot, "scripts/linux-after-pack.ts");
     buildConfig.linux = {
       target: target === "AppImage" ? [target, "deb"] : [target],
-      executableName: "t3code",
+      // rstack-code: its own /usr/bin entry, launcher and icon names, beside T3 Code's t3code.
+      executableName: LINUX_EXECUTABLE_NAME,
       icon: "icons",
       category: "Development",
       synopsis: "Desktop GUI for coding agents",
-      maintainer: "T3 Tools <hello@t3.codes>",
+      maintainer: "rstack code <iamrajjoshi@users.noreply.github.com>",
       protocols: [
         {
           name: "rstack code",
-          schemes: ["t3code", "t3code-dev"],
+          schemes: [DESKTOP_APP_SCHEME, DESKTOP_APP_DEVELOPMENT_SCHEME],
         },
       ],
       desktop: {
         entry: {
           // Match Electron's WM_CLASS from setDesktopName so docks use this launcher.
-          StartupWMClass: "com.t3tools.T3Code",
+          StartupWMClass: LINUX_DESKTOP_APP_ID,
         },
       },
     };
@@ -2947,10 +2954,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       };
     }
     buildConfig.deb = {
+      // The package name defaults to package.json's `t3code`, which would replace T3 Code's package.
+      packageName: LINUX_EXECUTABLE_NAME,
       // FPM runs outside the staged app directory, so source paths must be absolute.
       fpm: [
         `${path.join(repoRoot, "apps/desktop/resources/linux/com.t3tools.t3code.metainfo.xml")}=/usr/share/metainfo/${DESKTOP_APP_ID}.metainfo.xml`,
-        `${path.join(repoRoot, "LICENSE")}=/usr/share/doc/t3code/copyright`,
+        `${path.join(repoRoot, "LICENSE")}=/usr/share/doc/${LINUX_EXECUTABLE_NAME}/copyright`,
       ],
       // Debian 13 and Ubuntu 24.04 use 64-bit-time names; retain old-name fallbacks.
       depends: [
@@ -3930,8 +3939,9 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     description:
       "rstack code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
     license: "MIT",
-    homepage: "https://t3.codes",
-    author: "T3 Tools",
+    homepage: "https://github.com/iamrajjoshi/rstack-code",
+    // electron-builder shows the author as the Windows publisher and installer company name.
+    author: "rstack code",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,

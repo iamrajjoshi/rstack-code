@@ -7,7 +7,7 @@
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              T3 home directory (default: ~\.t3)
+#   T3CODE_HOME              T3 home directory (default: ~\.rstack)
 #   T3CODE_INSTALL_BIN_DIR   where t3.exe is linked (default: ~\.local\bin)
 #   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
@@ -18,7 +18,7 @@ $ErrorActionPreference = "Stop"
 
 $repo = "iamrajjoshi/rstack-code"
 $baseUrl = if ($env:T3CODE_RELEASE_BASE_URL) { $env:T3CODE_RELEASE_BASE_URL.TrimEnd("/") } else { "https://github.com/$repo/releases/download" }
-$t3Home = if ($env:T3CODE_HOME) { $env:T3CODE_HOME } else { Join-Path $HOME ".t3" }
+$t3Home = if ($env:T3CODE_HOME) { $env:T3CODE_HOME } else { Join-Path $HOME ".rstack" }
 $binDir = if ($env:T3CODE_INSTALL_BIN_DIR) { $env:T3CODE_INSTALL_BIN_DIR } else { Join-Path $HOME ".local\bin" }
 # Absolute, so PATH never gets a folder that changes with the working directory.
 $binDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($binDir)
@@ -120,11 +120,11 @@ function Fetch([string] $uri, [string] $destination, [switch] $progress) {
 if ($interactive) {
   # Block characters are constructed so this file also loads correctly in PowerShell 5.1.
   $mark = @(
-    "########## ######## ",
-    "    ###       _##^  ",
-    "    ###       ####_ ",
-    "    ###    _     ###",
-    "    ###    #######^ "
+    "###_###_    _#####_ ",
+    "####^ ^^   ###      ",
+    "###        ^#####_  ",
+    "###             ### ",
+    "###        ^######^ "
   )
   [Console]::Error.WriteLine()
   for ($i = 0; $i -lt $mark.Length; $i++) {

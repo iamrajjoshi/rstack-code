@@ -593,7 +593,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         undefined,
       );
 
-      assert.nestedPropertyVal(linux, "linux.desktop.entry.StartupWMClass", "com.t3tools.T3Code");
+      assert.nestedPropertyVal(
+        linux,
+        "linux.desktop.entry.StartupWMClass",
+        "com.iamrajjoshi.RstackCode",
+      );
+      // Installs beside T3 Code's t3code package, binary, launcher and URL schemes.
+      assert.nestedPropertyVal(linux, "linux.executableName", "rstackcode");
+      assert.nestedPropertyVal(linux, "deb.packageName", "rstackcode");
+      assert.deepNestedPropertyVal(linux, "linux.protocols[0].schemes", [
+        "rstackcode",
+        "rstackcode-dev",
+      ]);
     }),
   );
 

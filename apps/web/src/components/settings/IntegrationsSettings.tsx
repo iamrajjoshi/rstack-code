@@ -45,6 +45,7 @@ import { useRef, useState } from "react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
 
+import { APP_BASE_NAME } from "~/branding";
 import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { resolveEnvironmentOptionLabel } from "~/components/BranchToolbar.logic";
 import { previewBridge } from "~/components/preview/previewBridge";
@@ -692,7 +693,7 @@ function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boo
 
 const LINK_TARGET_LABELS: Readonly<Record<BrowserLinkTarget, string>> = {
   system: msg("Your default browser"),
-  app: "T3 Code",
+  app: APP_BASE_NAME,
 };
 
 function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) {

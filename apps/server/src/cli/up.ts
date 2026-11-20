@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -209,8 +210,8 @@ const formatNextSteps = (routes: Routes, serviceInstalled: boolean, hints: Hints
       ? []
       : [
           serviceInstalled
-            ? "Remote access is off. T3 Code still runs here in the background."
-            : `Remote access is off. Run \`${hints.run}\` to use T3 Code here.`,
+            ? `Remote access is off. ${PRODUCT_NAME} still runs here in the background.`
+            : `Remote access is off. Run \`${hints.run}\` to use ${PRODUCT_NAME} here.`,
         ]),
   ].join("\n");
 
@@ -314,7 +315,7 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
     const confirmed = yield* Prompt.run(
       Prompt.Confirm({
         message: update
-          ? "Update and restart T3 Code? Running agent turns will stop."
+          ? `Update and restart ${PRODUCT_NAME}? Running agent turns will stop.`
           : "Apply changes and restart? Running agent turns will stop.",
         initial: true,
       }),
@@ -389,7 +390,7 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
       yield* Console.log(`Keeping installed service version t3@${installedVersion}.`);
     }
     if (update && !interactive) {
-      yield* Console.log("Updating T3 Code. Running agent turns will stop.");
+      yield* Console.log(`Updating ${PRODUCT_NAME}. Running agent turns will stop.`);
     }
     const result = newer
       ? ({ changed: false } as const)
@@ -427,7 +428,7 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
         yield* Console.log(`Run \`${command}\` to turn T3 Connect off.`);
       } else {
         if (!interactive && !stopped) {
-          yield* Console.log("Restarting T3 Code. Running agent turns will stop.");
+          yield* Console.log(`Restarting ${PRODUCT_NAME}. Running agent turns will stop.`);
         }
         const outcome = yield* service.restart.pipe(Effect.tapError(() => rollBack));
         if (outcome === "queued") {

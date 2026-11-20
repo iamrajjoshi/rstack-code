@@ -31,5 +31,5 @@ export const APP_DISPLAY_NAME =
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
 export const DESKTOP_DOWNLOAD_URL = "https://github.com/iamrajjoshi/rstack-code/releases";
-// Redirects to the App Store or Google Play to match the phone that opens it.
-export const MOBILE_APP_URL = "https://t3.codes/mobile";
+// rstack-code: publishes no mobile app; T3 Code's store listings are a different product.
+export const MOBILE_APP_URL = "https://github.com/iamrajjoshi/rstack-code";
