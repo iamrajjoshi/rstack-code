@@ -12178,5 +12178,6 @@
   "51ffaef4f1687539": "{count, plural, one {{count} com falha} other {{count} com falha}}",
   "66b20c1a4015e2a8": "{count, plural, one {{count} concluído} other {{count} concluídos}}",
   "5d8a31c5377ec3d7": "Ocultar subagentes: {summary}",
-  "35376d3144ad77f3": "Mostrar subagentes: {summary}"
+  "35376d3144ad77f3": "Mostrar subagentes: {summary}",
+  "34cc896061b1317a": "{count, plural, one {Mostrar mais {count}} other {Mostrar mais {count}}}"
 }

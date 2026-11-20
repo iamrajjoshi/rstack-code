@@ -12179,5 +12179,6 @@
   "51ffaef4f1687539": "{count, plural, one {{count} en échec} other {{count} en échec}}",
   "66b20c1a4015e2a8": "{count, plural, one {{count} terminé} other {{count} terminés}}",
   "5d8a31c5377ec3d7": "Masquer les sous-agents : {summary}",
-  "35376d3144ad77f3": "Afficher les sous-agents : {summary}"
+  "35376d3144ad77f3": "Afficher les sous-agents : {summary}",
+  "34cc896061b1317a": "{count, plural, one {Afficher {count} de plus} other {Afficher {count} de plus}}"
 }

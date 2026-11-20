@@ -235,6 +235,37 @@ describe("omitIdleSubagentShells", () => {
     ]);
   });
 
+  it("keeps a parent's live children and newest idle few however many it has", () => {
+    const workers = Array.from({ length: 300 }, (_, index) =>
+      row(`worker-${index}`, "root", { updatedAt: DateTime.makeUnsafe(index) }),
+    );
+    const threads = [
+      row("root", null),
+      ...workers,
+      row("live", "root", { activityRunStatus: "running" }),
+      // A sub-coordinator stays above its workers without taking an idle slot.
+      row("sub", "root", { updatedAt: DateTime.makeUnsafe(-1) }),
+      ...Array.from({ length: 8 }, (_, index) =>
+        row(`sub-worker-${index}`, "sub", { updatedAt: DateTime.makeUnsafe(index) }),
+      ),
+    ];
+    expect(omitIdleSubagentShells(threads).map((thread) => thread.id)).toEqual([
+      "root",
+      "worker-295",
+      "worker-296",
+      "worker-297",
+      "worker-298",
+      "worker-299",
+      "live",
+      "sub",
+      "sub-worker-3",
+      "sub-worker-4",
+      "sub-worker-5",
+      "sub-worker-6",
+      "sub-worker-7",
+    ]);
+  });
+
   it("still filters the transcript events of omitted children for a subscriber that opts in", () => {
     const threads = [olderSettledRoot, row("idle", "root"), ...newerSettled];
     const omitted = activeShellRowsForSubscriber(threads, true);

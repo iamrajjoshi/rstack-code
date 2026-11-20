@@ -12179,5 +12179,6 @@
   "51ffaef4f1687539": "{count, plural, one {{count} fehlgeschlagen} other {{count} fehlgeschlagen}}",
   "66b20c1a4015e2a8": "{count, plural, one {{count} fertig} other {{count} fertig}}",
   "5d8a31c5377ec3d7": "Subagents ausblenden: {summary}",
-  "35376d3144ad77f3": "Subagents einblenden: {summary}"
+  "35376d3144ad77f3": "Subagents einblenden: {summary}",
+  "34cc896061b1317a": "{count, plural, one {{count} weiteren anzeigen} other {{count} weitere anzeigen}}"
 }

@@ -12186,5 +12186,6 @@
   "51ffaef4f1687539": "{count, plural, one {{count} misslyckad} other {{count} misslyckade}}",
   "66b20c1a4015e2a8": "{count, plural, one {{count} klar} other {{count} klara}}",
   "5d8a31c5377ec3d7": "Dölj subagenter: {summary}",
-  "35376d3144ad77f3": "Visa subagenter: {summary}"
+  "35376d3144ad77f3": "Visa subagenter: {summary}",
+  "34cc896061b1317a": "{count, plural, one {Visa {count} till} other {Visa {count} till}}"
 }

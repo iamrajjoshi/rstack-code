@@ -12127,5 +12127,6 @@
   "51ffaef4f1687539": "{count, plural, other {{count} 件失敗}}",
   "66b20c1a4015e2a8": "{count, plural, other {{count} 件完了}}",
   "5d8a31c5377ec3d7": "サブエージェントを隠す: {summary}",
-  "35376d3144ad77f3": "サブエージェントを表示: {summary}"
+  "35376d3144ad77f3": "サブエージェントを表示: {summary}",
+  "34cc896061b1317a": "{count, plural, other {さらに{count}件を表示}}"
 }

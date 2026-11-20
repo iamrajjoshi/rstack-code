@@ -12123,5 +12123,6 @@
   "51ffaef4f1687539": "{count, plural, other {실패 {count}개}}",
   "66b20c1a4015e2a8": "{count, plural, other {완료 {count}개}}",
   "5d8a31c5377ec3d7": "서브에이전트 숨기기: {summary}",
-  "35376d3144ad77f3": "서브에이전트 보기: {summary}"
+  "35376d3144ad77f3": "서브에이전트 보기: {summary}",
+  "34cc896061b1317a": "{count, plural, other {{count}개 더 보기}}"
 }

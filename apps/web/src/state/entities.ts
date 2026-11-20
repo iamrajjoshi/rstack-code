@@ -176,9 +176,21 @@ export function useChildThreadInputs(ref: ScopedThreadRef | null) {
   );
 }
 
-/** The thread's subagents, held through their streaming ticks. */
+/** The thread's subagents and delegated tasks, held through their streaming ticks. */
 export function useSubagentChildren(ref: ScopedThreadRef): ReadonlyArray<EnvironmentThreadShell> {
   return useAtomValue(environmentThreadShells.subagentChildrenAtom(ref));
+}
+
+/** Every thread nested below the thread, held through their streaming ticks. */
+export function useSubagentDescendants(
+  ref: ScopedThreadRef,
+): ReadonlyArray<EnvironmentThreadShell> {
+  return useAtomValue(environmentThreadShells.subagentDescendantsAtom(ref));
+}
+
+/** Idle subagents of the thread its environment's shell left out. */
+export function useOmittedSubagentCount(ref: ScopedThreadRef): number {
+  return useAtomValue(environmentThreadShells.omittedSubagentCountAtom(ref));
 }
 
 export function useThreadProjection(ref: ScopedThreadRef | null): EnvironmentThread | null {

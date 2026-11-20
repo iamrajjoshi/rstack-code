@@ -39,6 +39,10 @@ const EMPTY_SIDE_CHATS_BY_PARENT: ReadonlyMap<
 > = new Map();
 const EMPTY_THREAD_SHELLS: ReadonlyArray<EnvironmentThreadShell> = Object.freeze([]);
 const EMPTY_SUBAGENT_IDS_BY_PARENT: ReadonlyMap<ThreadId, ReadonlyArray<ThreadId>> = new Map();
+const EMPTY_REFS_BY_PARENT_KEY: ReadonlyMap<string, ReadonlyArray<ScopedThreadRef>> = new Map();
+const EMPTY_OMITTED_SUBAGENTS: ReadonlyMap<ThreadId, number> = new Map();
+// A cycle in lineage can't happen, but a bad row must not walk forever.
+const MAX_SUBAGENT_DEPTH = 8;
 const EMPTY_THREAD_REFS_BY_PROJECT: ReadonlyMap<
   ProjectId,
   ReadonlyArray<ScopedThreadRef>
@@ -126,6 +130,17 @@ function subagentRequest(thread: OrchestrationV2ThreadShell): PendingSubagentReq
     return null;
   }
   return kind === "user_input" ? "user_input" : "approval";
+}
+
+/**
+ * What a subagent or delegated task asks that reaches the user through its parent's row:
+ * approvals and user-only questions. Its coordinator answers its other questions.
+ */
+export function childRequestReachingUser(
+  thread: OrchestrationV2ThreadShell,
+): PendingSubagentRequest | null {
+  const request = rolledUpRequest(thread, subagentRequest(thread));
+  return request === "user_only_input" ? "user_input" : request === "approval" ? request : null;
 }
 
 /** A user-only card keeps its mark through roll-ups; clients see it as user_input. */
@@ -228,6 +243,20 @@ export function childThreadInputsTitle(
 }
 
 const sameWireThreadShell = Schema.toEquivalence(OrchestrationV2ThreadShell);
+
+/** Whether two groupings hold the same members in the same order under the same keys. */
+function sameGroups<K, V>(
+  left: ReadonlyMap<K, ReadonlyArray<V>>,
+  right: ReadonlyMap<K, ReadonlyArray<V>>,
+  sameMembers: (left: ReadonlyArray<V>, right: ReadonlyArray<V>) => boolean,
+): boolean {
+  if (left.size !== right.size) return false;
+  for (const [key, members] of right) {
+    const previous = left.get(key);
+    if (previous === undefined || !sameMembers(previous, members)) return false;
+  }
+  return true;
+}
 
 // While a run streams, the server bumps the shell's timestamps, item counts and
 // latest message several times a second. Only the zero crossing of the counts
@@ -332,22 +361,65 @@ export function createEnvironmentThreadShellAtoms(input: {
     }).pipe(Atom.withLabel(`environment-side-chats-by-parent:${environmentId}`)),
   );
 
-  // Subagent ids by parent, for sidebars that nest them. Without subagents it stays the same
-  // empty map, so parent rows do no work.
-  const environmentSubagentIdsByParentAtom = Atom.family((environmentId: EnvironmentId) =>
-    Atom.make((get) => {
-      let byParent: Map<ThreadId, ThreadId[]> | undefined;
+  // Subagent ids by parent, for sidebars that nest them. It keeps the previous map until the
+  // grouping changes, so a streaming tick does no work in parent rows.
+  const environmentSubagentIdsByParentAtom = Atom.family((environmentId: EnvironmentId) => {
+    let previous: ReadonlyMap<ThreadId, ReadonlyArray<ThreadId>> = EMPTY_SUBAGENT_IDS_BY_PARENT;
+    return Atom.make((get) => {
+      const byParent = new Map<ThreadId, ThreadId[]>();
       for (const thread of get(environmentThreadsAtom(environmentId))) {
         const parentId = thread.lineage.parentThreadId;
         if (thread.lineage.relationshipToParent !== "subagent" || parentId === null) continue;
-        byParent ??= new Map();
         const siblings = byParent.get(parentId);
         if (siblings) siblings.push(thread.id);
         else byParent.set(parentId, [thread.id]);
       }
-      return byParent ?? EMPTY_SUBAGENT_IDS_BY_PARENT;
-    }).pipe(Atom.withLabel(`environment-subagent-ids-by-parent:${environmentId}`)),
-  );
+      if (!sameGroups(previous, byParent, arrayElementsEqual)) previous = byParent;
+      return previous;
+    }).pipe(Atom.withLabel(`environment-subagent-ids-by-parent:${environmentId}`));
+  });
+
+  // Tasks delegated from a thread in any environment, by that thread's key, for sidebars that
+  // nest them under it like subagents.
+  let previousDelegatedTaskRefs = EMPTY_REFS_BY_PARENT_KEY;
+  const delegatedTaskRefsByParentAtom = Atom.make((get) => {
+    const byParent = new Map<string, ScopedThreadRef[]>();
+    for (const environmentId of enabledEnvironmentIds(get(input.catalogValueAtom))) {
+      for (const thread of get(environmentThreadsAtom(environmentId))) {
+        const from = thread.delegatedFrom;
+        if (from === undefined || !isListedThreadLineage(thread.lineage)) continue;
+        const parentKey = threadKey(from);
+        const siblings = byParent.get(parentKey);
+        const ref = { environmentId, threadId: thread.id };
+        if (siblings) siblings.push(ref);
+        else byParent.set(parentKey, [ref]);
+      }
+    }
+    if (!sameGroups(previousDelegatedTaskRefs, byParent, threadRefsEqual)) {
+      previousDelegatedTaskRefs = byParent;
+    }
+    return previousDelegatedTaskRefs;
+  }).pipe(Atom.withLabel("environment-delegated-task-refs-by-parent"));
+
+  // Idle subagents the shell snapshot left out, by parent.
+  const omittedSubagentsByParentAtom = Atom.family((environmentId: EnvironmentId) => {
+    let previous: {
+      readonly source: OrchestrationV2ShellSnapshot["omittedSubagents"];
+      readonly byParent: ReadonlyMap<ThreadId, number>;
+    } = { source: undefined, byParent: EMPTY_OMITTED_SUBAGENTS };
+    return Atom.make((get) => {
+      const source = get(input.snapshotAtom(environmentId))?.omittedSubagents;
+      if (source === previous.source) return previous.byParent;
+      previous = {
+        source,
+        byParent:
+          source === undefined || source.length === 0
+            ? EMPTY_OMITTED_SUBAGENTS
+            : new Map(source.map((entry) => [entry.parentThreadId, entry.count] as const)),
+      };
+      return previous.byParent;
+    }).pipe(Atom.withLabel(`environment-omitted-subagents-by-parent:${environmentId}`));
+  });
 
   // What an environment's own subagents ask. Kept apart from the tasks other
   // environments run for it, so two environments delegating to each other
@@ -614,24 +686,55 @@ export function createEnvironmentThreadShellAtoms(input: {
     }).pipe(Atom.withLabel(`environment-side-chats:${key}`));
   });
 
-  // A parent's subagents in creation order, held through their streaming ticks.
-  const subagentChildrenAtomFamily = Atom.family((key: string) => {
-    const ref = parseThreadKey(key);
+  // A thread's subagents, and the tasks it delegated to any environment.
+  const nestedChildRefs = (get: Atom.AtomContext, ref: ScopedThreadRef) => {
+    const ids = get(environmentSubagentIdsByParentAtom(ref.environmentId)).get(ref.threadId);
+    const delegated = get(delegatedTaskRefsByParentAtom).get(threadKey(ref));
+    return [
+      ...(ids ?? []).map((threadId) => ({ environmentId: ref.environmentId, threadId })),
+      ...(delegated ?? []),
+    ];
+  };
+
+  // A parent's nested threads in creation order, held through their streaming ticks: its
+  // children, or with `descendants` every thread below it.
+  const nestedThreadsAtomFamily = Atom.family((familyKey: string) => {
+    const { key, descendants } = JSON.parse(familyKey) as {
+      readonly key: string;
+      readonly descendants: boolean;
+    };
     let previous = EMPTY_THREAD_SHELLS;
     return Atom.make((get) => {
-      const ids = get(environmentSubagentIdsByParentAtom(ref.environmentId)).get(ref.threadId);
       const next: EnvironmentThreadShell[] = [];
-      for (const threadId of ids ?? []) {
-        const shell = get(
-          quietThreadShellAtomFamily(threadKey({ environmentId: ref.environmentId, threadId })),
-        );
-        if (shell !== null && shell.archivedAt === null) next.push(shell);
+      const seen = new Set<string>([key]);
+      let level = [parseThreadKey(key)];
+      for (let depth = 0; level.length > 0 && depth < MAX_SUBAGENT_DEPTH; depth += 1) {
+        const nextLevel: ScopedThreadRef[] = [];
+        for (const parent of level) {
+          for (const childRef of nestedChildRefs(get, parent)) {
+            const childKey = threadKey(childRef);
+            if (seen.has(childKey)) continue;
+            seen.add(childKey);
+            const shell = get(quietThreadShellAtomFamily(childKey));
+            if (shell === null || shell.archivedAt !== null) continue;
+            next.push(shell);
+            nextLevel.push(childRef);
+          }
+        }
+        level = descendants ? nextLevel : [];
       }
       next.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
       if (arrayElementsEqual(previous, next)) return previous;
       previous = next.length === 0 ? EMPTY_THREAD_SHELLS : next;
       return previous;
-    }).pipe(Atom.withLabel(`environment-subagent-children:${key}`));
+    }).pipe(Atom.withLabel(`environment-nested-threads:${familyKey}`));
+  });
+
+  const omittedSubagentCountAtomFamily = Atom.family((key: string) => {
+    const ref = parseThreadKey(key);
+    return Atom.make(
+      (get) => get(omittedSubagentsByParentAtom(ref.environmentId)).get(ref.threadId) ?? 0,
+    ).pipe(Atom.withLabel(`environment-omitted-subagent-count:${key}`));
   });
 
   const threadShellsForProjectRefsAtomFamily = Atom.family((key: string) => {
@@ -837,6 +940,14 @@ export function createEnvironmentThreadShellAtoms(input: {
     quietThreadShellAtom: (ref: ScopedThreadRef) => quietThreadShellAtomFamily(threadKey(ref)),
     childThreadInputsAtom: (ref: ScopedThreadRef) => childThreadInputsAtomFamily(threadKey(ref)),
     sideChatsAtom: (ref: ScopedThreadRef) => sideChatsAtomFamily(threadKey(ref)),
-    subagentChildrenAtom: (ref: ScopedThreadRef) => subagentChildrenAtomFamily(threadKey(ref)),
+    /** A thread's subagents and delegated tasks, nested under it in sidebars. */
+    subagentChildrenAtom: (ref: ScopedThreadRef) =>
+      nestedThreadsAtomFamily(JSON.stringify({ key: threadKey(ref), descendants: false })),
+    /** Every thread nested below a thread, for roll-ups over its whole tree. */
+    subagentDescendantsAtom: (ref: ScopedThreadRef) =>
+      nestedThreadsAtomFamily(JSON.stringify({ key: threadKey(ref), descendants: true })),
+    /** Idle subagents of the thread the shell snapshot left out; its family holds them. */
+    omittedSubagentCountAtom: (ref: ScopedThreadRef) =>
+      omittedSubagentCountAtomFamily(threadKey(ref)),
   };
 }

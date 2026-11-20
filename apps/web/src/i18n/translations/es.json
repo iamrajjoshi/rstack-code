@@ -12174,5 +12174,6 @@
   "51ffaef4f1687539": "{count, plural, one {{count} con error} other {{count} con error}}",
   "66b20c1a4015e2a8": "{count, plural, one {{count} terminado} other {{count} terminados}}",
   "5d8a31c5377ec3d7": "Ocultar subagentes: {summary}",
-  "35376d3144ad77f3": "Mostrar subagentes: {summary}"
+  "35376d3144ad77f3": "Mostrar subagentes: {summary}",
+  "34cc896061b1317a": "{count, plural, one {Mostrar {count} más} other {Mostrar {count} más}}"
 }

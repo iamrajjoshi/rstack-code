@@ -742,6 +742,58 @@ describe("v2 thread shell lists", () => {
       registry.dispose();
     }
   });
+
+  it("nests a task delegated to a linked environment and walks descendants across it", () => {
+    const { registry, threads, snapshotAtom } = makeHarness([environmentId, remoteEnvironmentId]);
+    const root = v2ThreadShell;
+    const task = {
+      ...root,
+      id: ThreadId.make("remote-task"),
+      createdAt: DateTime.add(v2Now, { seconds: 1 }),
+      delegatedFrom: { environmentId, threadId: root.id, title: root.title },
+    };
+    const taskWorker = {
+      ...root,
+      id: ThreadId.make("task-worker"),
+      createdAt: DateTime.add(v2Now, { seconds: 2 }),
+      lineage: {
+        ...root.lineage,
+        parentThreadId: task.id,
+        relationshipToParent: "subagent" as const,
+      },
+    };
+    registry.set(snapshotAtom(environmentId), {
+      ...v2ShellSnapshot,
+      threads: [root],
+      omittedSubagents: [{ parentThreadId: root.id, count: 12 }],
+    });
+    registry.set(snapshotAtom(remoteEnvironmentId), {
+      ...v2ShellSnapshot,
+      threads: [task, taskWorker],
+    });
+    const rootRef = { environmentId, threadId: root.id };
+    const children = threads.subagentChildrenAtom(rootRef);
+    const descendants = threads.subagentDescendantsAtom(rootRef);
+    const omitted = threads.omittedSubagentCountAtom(rootRef);
+    const disposers = [
+      registry.mount(children),
+      registry.mount(descendants),
+      registry.mount(omitted),
+    ];
+    try {
+      expect(registry.get(children).map((thread) => thread.environmentId)).toEqual([
+        remoteEnvironmentId,
+      ]);
+      expect(registry.get(descendants).map((thread) => thread.id)).toEqual([
+        task.id,
+        taskWorker.id,
+      ]);
+      expect(registry.get(omitted)).toBe(12);
+    } finally {
+      for (const dispose of disposers) dispose();
+      registry.dispose();
+    }
+  });
 });
 
 describe("resolveListedAncestorThreadRef", () => {

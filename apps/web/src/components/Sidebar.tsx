@@ -271,6 +271,11 @@ import {
   type SidebarProviderEntry,
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
+import {
+  isOpenThreadNested,
+  nestedParentKey,
+  nestThreadSearchResults,
+} from "./sidebar/SidebarChildThreads.logic";
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
 import {
   SidebarProjectFolderHeader,
@@ -1122,6 +1127,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     routeThreadRef === null
       ? null
       : scopedThreadKey(resolveListedAncestorThreadRef(routeThreadRef, threads));
+  // A subagent or delegated task has its own nested row, so its listed ancestor stops standing in.
+  const routeThreadIsNested =
+    routeThreadKey !== null &&
+    routeRowThreadKey !== routeThreadKey &&
+    isOpenThreadNested(routeThreadKey, (key) =>
+      threads.find((candidate) => threadShellKey(candidate) === key),
+    );
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
   // The open draft's first send names its thread in place; a finalized draft reached by
   // navigation resolves through its redirect instead, and still reveals.
@@ -1362,6 +1374,28 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       scopedProjectGroups.length > 0 || (group.pinned && !group.archived),
   });
 
+  // Subagents and delegated tasks under a searchable thread match too, without rows of their own.
+  const threadByShellKey = isSearchingThreads
+    ? new Map(threads.map((thread) => [threadShellKey(thread), thread] as const))
+    : null;
+  const searchableKeys = new Set(searchableThreads.map(threadShellKey));
+  const searchThreads =
+    threadByShellKey === null
+      ? searchableThreads
+      : [
+          ...searchableThreads,
+          ...threads.filter((thread) => {
+            const seen = new Set<string>();
+            let parentKey = nestedParentKey(thread);
+            while (parentKey !== null && !seen.has(parentKey)) {
+              if (searchableKeys.has(parentKey)) return true;
+              seen.add(parentKey);
+              const parent = threadByShellKey.get(parentKey);
+              parentKey = parent === undefined ? null : nestedParentKey(parent);
+            }
+            return false;
+          }),
+        ];
   // Ranked across environments as the palette ranks them, so one
   // environment's list does not sit above another's better matches; rows
   // already shown keep their places while slower environments answer.
@@ -1369,7 +1403,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     threadSearch.matches.length === 0
       ? null
       : new Map(
-          searchableThreads.map((thread) => [
+          searchThreads.map((thread) => [
             threadSearchMatchKey({ environmentId: thread.environmentId, threadId: thread.id }),
             thread,
           ]),
@@ -1401,8 +1435,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   );
   if (messageOrder !== shownMessageOrder) setShownMessageOrder(messageOrder);
   const { titleMatches: threadTitleResults, contentMatches: threadContentResults } =
-    searchSidebarThreads(searchableThreads, threadSearchQuery, new Set(messageOrder.keys));
-  const threadSearchResults = [...threadTitleResults, ...threadContentResults];
+    searchSidebarThreads(searchThreads, threadSearchQuery, new Set(messageOrder.keys));
+  // A matching worker lists under its matching coordinator.
+  const nestedSearchResults = nestThreadSearchResults(
+    [...threadTitleResults, ...threadContentResults],
+    (key) => threadByShellKey?.get(key),
+  );
+  const threadSearchResults = nestedSearchResults.map(({ thread }) => thread);
   // Only rows listed for their messages show one, and open find on it.
   const threadSearchMatchByKey = new Map(
     threadContentResults.flatMap((thread) => {
@@ -2627,11 +2666,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           await handleMultiSelectContextMenu(position, source);
           return;
         }
-        // Search results also reach threads in collapsed shelves, which are not rendered rows.
+        // Search results also reach threads in collapsed shelves, which are not rendered rows,
+        // and nested subagent rows are in no list at all.
         const thread =
           threadByKeyRef.current.get(threadKey) ??
-          searchableThreads.find((candidate) => threadShellKey(candidate) === threadKey);
+          threads.find((candidate) => threadShellKey(candidate) === threadKey);
         if (!thread) return;
+        // Subagents and delegated tasks have no list placement of their own to pin, settle or
+        // snooze, and their parent's project already scopes them.
+        const isNested =
+          thread.lineage.relationshipToParent === "subagent" || delegatedUnderParent.has(threadKey);
         const threadWorkspacePath =
           thread.worktreePath ??
           projectByKey.get(`${thread.environmentId}:${thread.projectId}`)?.workspaceRoot ??
@@ -2667,7 +2711,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               branch: thread.branch ?? null,
               // An archived project is not a filter choice.
               projectFilter:
-                threadProjectGroup && !threadProjectGroup.archived
+                !isNested && threadProjectGroup && !threadProjectGroup.archived
                   ? {
                       label: threadProjectGroup.displayName,
                       isActive: projectScopeKeys.includes(threadProjectGroup.projectKey),
@@ -2683,13 +2727,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               canShareWithGuest: appAtomRegistry.get(
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
-              canTurnIntoProject: canTurnThreadIntoProject(threadRef),
-              canRename: !fromSearch,
+              canTurnIntoProject: !isNested && canTurnThreadIntoProject(threadRef),
+              // Nested rows render no inline title editor.
+              canRename: !fromSearch && !isNested,
               supports: {
-                settlement: configLoaded,
-                autoSettleOptOut: supportsAutoSettleOptOut,
-                snooze: configLoaded,
-                pinning: configLoaded,
+                settlement: configLoaded && !isNested,
+                autoSettleOptOut: supportsAutoSettleOptOut && !isNested,
+                snooze: configLoaded && !isNested,
+                pinning: configLoaded && !isNested,
                 titleRegeneration: configLoaded,
               },
               snoozePresets,
@@ -3262,13 +3307,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     aria-label={gt("Thread search results")}
                     className="flex flex-col gap-px"
                   >
-                    {threadSearchResults.map((thread, index) => {
+                    {nestedSearchResults.map(({ thread, depth }, index) => {
                       const threadKey = scopedThreadKey(
                         scopeThreadRef(thread.environmentId, thread.id),
                       );
                       return (
                         <SidebarSearchResultRow
                           isSettled={settledThreadKeys.has(threadKey)}
+                          nested={depth > 0}
                           key={threadKey}
                           thread={thread}
                           project={
@@ -3288,7 +3334,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             EMPTY_PROVIDER_ENTRIES
                           }
                           isHighlighted={activeSearchResultIndex === index}
-                          isRouteActive={routeRowThreadKey === threadKey}
+                          isRouteActive={
+                            routeThreadIsNested
+                              ? routeThreadKey === threadKey
+                              : routeRowThreadKey === threadKey
+                          }
                           resultId={threadSearchResultId(index)}
                           searchMatch={
                             threadSearchMatchByKey.get(
@@ -3479,13 +3529,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 : null
                             }
                             wokeAt={threadWokeAt(thread, { now: snoozeNow })}
-                            isActive={routeRowThreadKey === threadKey}
+                            isActive={routeRowThreadKey === threadKey && !routeThreadIsNested}
                             revealRef={
                               routeRowThreadKey === threadKey ? revealActiveRow : undefined
                             }
                             isRouteThread={routeThreadKey === threadKey}
                             openChildThreadKey={
-                              routeRowThreadKey === threadKey && routeThreadKey !== threadKey
+                              routeRowThreadKey === threadKey && routeThreadIsNested
                                 ? routeThreadKey
                                 : null
                             }

@@ -2388,6 +2388,13 @@ export const OrchestrationV2OlderSettledThreads = Schema.Struct({
 });
 export type OrchestrationV2OlderSettledThreads = typeof OrchestrationV2OlderSettledThreads.Type;
 
+/** Idle subagents of one parent that a snapshot left out past the newest few it sends. */
+export const OrchestrationV2OmittedSubagentCount = Schema.Struct({
+  parentThreadId: ThreadId,
+  count: PositiveInt,
+});
+export type OrchestrationV2OmittedSubagentCount = typeof OrchestrationV2OmittedSubagentCount.Type;
+
 export const OrchestrationV2ThreadShellSnapshot = Schema.Struct({
   schemaVersion: PositiveInt,
   snapshotSequence: NonNegativeInt,
@@ -2400,6 +2407,12 @@ export const OrchestrationV2ShellSnapshot = Schema.Struct({
   ...OrchestrationV2ThreadShellSnapshot.fields,
   projects: Schema.Array(OrchestrationProjectShell),
   olderSettled: Schema.optionalKey(OrchestrationV2OlderSettledThreads),
+  /**
+   * Snapshots that leave out idle subagents (`omitIdleSubagents`) count, per parent, the idle
+   * children under a listed thread they left out; `getThreadFamily` reads them. Exact as of
+   * `snapshotSequence`.
+   */
+  omittedSubagents: Schema.optionalKey(Schema.Array(OrchestrationV2OmittedSubagentCount)),
 });
 export type OrchestrationV2ShellSnapshot = typeof OrchestrationV2ShellSnapshot.Type;
 

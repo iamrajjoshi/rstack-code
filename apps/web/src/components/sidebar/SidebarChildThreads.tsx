@@ -1,21 +1,34 @@
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ContextMenuSource, ScopedThreadRef } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   CircleDotDashedIcon,
+  GitBranchIcon,
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
   UserRoundIcon,
 } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useGT } from "gt-react";
+import {
+  useEffect,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import { useGT, useMessages } from "gt-react";
 
 import { cn } from "~/lib/utils";
-import { useSubagentChildren } from "../../state/entities";
+import { contextMenuSourceOf } from "../../contextMenuSource";
+import { appAtomRegistry } from "../../rpc/atomRegistry";
+import {
+  useOmittedSubagentCount,
+  useSubagentChildren,
+  useSubagentDescendants,
+} from "../../state/entities";
+import { threadFamilies } from "../../state/threads";
 import { useUiStateStore } from "../../uiStateStore";
 import { getTriggerDisplayModelName } from "../chat/providerIconUtils";
 import {
@@ -24,11 +37,23 @@ import {
   resolveThreadLastVisitedAt,
   type SidebarThreadStatus,
 } from "../Sidebar.logic";
-import { resolveChildThreadsExpanded, summarizeChildThreads } from "./SidebarChildThreads.logic";
+import { prStatusIndicator, useLinkedThreadPullRequest } from "../ThreadStatusIndicators";
+import {
+  openThreadAncestry,
+  resolveChildThreadsExpanded,
+  summarizeChildThreads,
+  visibleChildThreads,
+} from "./SidebarChildThreads.logic";
 import type { SidebarProviderEntry } from "./SidebarThreadRow";
 
 // A cycle in lineage can't happen, but a bad row must not recurse forever.
 const MAX_DEPTH = 8;
+
+type ChildThreadContextMenu = (
+  threadRef: ScopedThreadRef,
+  position: { x: number; y: number },
+  source: ContextMenuSource,
+) => void;
 
 interface SidebarChildThreadsProps {
   readonly parentRef: ScopedThreadRef;
@@ -36,6 +61,7 @@ interface SidebarChildThreadsProps {
   readonly openThreadKey: string | null;
   readonly providerEntryByInstanceId: ReadonlyMap<string, SidebarProviderEntry>;
   readonly onThreadActivate: (threadRef: ScopedThreadRef) => void;
+  readonly onContextMenu: ChildThreadContextMenu;
   readonly depth?: number;
 }
 
@@ -43,13 +69,33 @@ interface SidebarChildThreadsProps {
 export function SidebarChildThreads(props: SidebarChildThreadsProps) {
   const gt = useGT();
   const children = useSubagentChildren(props.parentRef);
+  const descendants = useSubagentDescendants(props.parentRef);
+  const omitted = useOmittedSubagentCount(props.parentRef);
   const parentKey = scopedThreadKey(props.parentRef);
   const stored = useUiStateStore((state) => state.threadChildrenExpandedById[parentKey]);
   const setExpanded = useUiStateStore((state) => state.setThreadChildrenExpanded);
+  const [showAll, setShowAll] = useState(false);
   const depth = props.depth ?? 0;
+  const { rollup, kindByKey } = summarizeChildThreads(children, descendants);
+  const openAncestry = openThreadAncestry(props.openThreadKey, descendants);
+  const expanded = resolveChildThreadsExpanded(stored, rollup, openAncestry.size > 0);
+  // The shell sends only a parent's newest idle children; the rest come with its family.
+  const loadsFamily = expanded && showAll && omitted > 0;
+  const { environmentId, threadId } = props.parentRef;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds the parent's thread family in the registry while its full child list is shown
+  useEffect(() => {
+    if (!loadsFamily) return;
+    return threadFamilies.mount(appAtomRegistry, environmentId, threadId);
+  }, [loadsFamily, environmentId, threadId]);
   if (children.length === 0 || depth >= MAX_DEPTH) return null;
-  const rollup = summarizeChildThreads(children);
-  const expanded = resolveChildThreadsExpanded(stored, rollup);
+  const { visible, hidden } = visibleChildThreads({
+    children,
+    kindByKey,
+    descendants,
+    openAncestry,
+    showAll,
+  });
+  const moreCount = showAll ? 0 : hidden + omitted;
   const toggleId = `children:${parentKey}`;
   const summary = [
     rollup.working > 0
@@ -98,21 +144,45 @@ export function SidebarChildThreads(props: SidebarChildThreadsProps) {
           aria-hidden
           className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")}
         />
-        <span className="min-w-0 truncate tabular-nums">{summary}</span>
+        <span
+          className={cn(
+            "min-w-0 truncate tabular-nums",
+            rollup.input > 0 && "text-warning-foreground",
+          )}
+        >
+          {summary}
+        </span>
       </button>
       {expanded ? (
         <ul role="group" className="flex flex-col gap-px">
-          {children.map((child) => (
+          {visible.map((child) => (
             <SidebarChildThreadRow
-              key={child.id}
+              key={scopedThreadKey(scopeThreadRef(child.environmentId, child.id))}
               thread={child}
               navigationParent={toggleId}
               openThreadKey={props.openThreadKey}
               providerEntryByInstanceId={props.providerEntryByInstanceId}
               onThreadActivate={props.onThreadActivate}
+              onContextMenu={props.onContextMenu}
               depth={depth}
             />
           ))}
+          {moreCount > 0 ? (
+            <li className="list-none">
+              <button
+                type="button"
+                data-sidebar-row={`more:${parentKey}`}
+                data-sidebar-parent={toggleId}
+                onClick={() => setShowAll(true)}
+                className="flex h-6 w-full cursor-pointer items-center rounded-md px-1.5 text-left text-xs text-sidebar-muted-foreground outline-none hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                {gt("{count, plural, one {Show {count} more} other {Show {count} more}}", {
+                  count: moreCount,
+                  $context: "sidebar subagent list",
+                })}
+              </button>
+            </li>
+          ) : null}
         </ul>
       ) : null}
     </div>
@@ -137,13 +207,28 @@ function SidebarChildThreadRow(props: {
   readonly openThreadKey: string | null;
   readonly providerEntryByInstanceId: ReadonlyMap<string, SidebarProviderEntry>;
   readonly onThreadActivate: (threadRef: ScopedThreadRef) => void;
+  readonly onContextMenu: ChildThreadContextMenu;
   readonly depth: number;
 }) {
   const gt = useGT();
+  const messages = useMessages();
   const { thread } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const localLastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
+  // Only what the shell already carries: no pull request read starts for a child row.
+  const linkedPullRequest = useLinkedThreadPullRequest(
+    thread.environmentId,
+    thread.linkedPullRequest,
+    false,
+    thread.pullRequests,
+    thread.branchPullRequest,
+  );
+  const prStatus = prStatusIndicator(
+    linkedPullRequest?.pr ?? null,
+    linkedPullRequest?.sourceControlProvider,
+    messages,
+  );
   const lastVisitedAt = resolveThreadLastVisitedAt(thread.lastVisitedAt, localLastVisitedAt);
   const status = resolveSidebarRowStatus({ ...thread, lastVisitedAt });
   const isUnread = status === "ready" && hasUnseenCompletion({ ...thread, lastVisitedAt });
@@ -175,6 +260,14 @@ function SidebarChildThreadRow(props: {
     event.preventDefault();
     props.onThreadActivate(threadRef);
   };
+  const handleContextMenu = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    props.onContextMenu(
+      threadRef,
+      { x: event.clientX, y: event.clientY },
+      contextMenuSourceOf(event),
+    );
+  };
   return (
     <li className="list-none">
       <div
@@ -186,6 +279,7 @@ function SidebarChildThreadRow(props: {
         aria-current={isOpen ? "page" : undefined}
         onClick={() => props.onThreadActivate(threadRef)}
         onKeyDown={handleKeyDown}
+        onContextMenu={handleContextMenu}
         className={cn(
           "flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-left text-xs outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           isOpen
@@ -198,8 +292,24 @@ function SidebarChildThreadRow(props: {
           className={cn("size-3.5 shrink-0", isUnread ? "text-success-foreground" : color)}
         />
         <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+        {prStatus ? (
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-0.5 text-2xs",
+              prStatus.colorClass,
+            )}
+          >
+            <prStatus.Icon aria-hidden className="size-3" />
+            <span className="tabular-nums">#{linkedPullRequest?.pr?.number}</span>
+          </span>
+        ) : thread.branch ? (
+          <span className="inline-flex max-w-[35%] shrink-0 items-center gap-0.5 text-2xs text-sidebar-muted-foreground">
+            <GitBranchIcon aria-hidden className="size-3 shrink-0" />
+            <span className="min-w-0 truncate">{thread.branch}</span>
+          </span>
+        ) : null}
         {modelLabel ? (
-          <span className="max-w-[45%] shrink-0 truncate text-2xs text-sidebar-muted-foreground">
+          <span className="max-w-[35%] shrink-0 truncate text-2xs text-sidebar-muted-foreground">
             {modelLabel}
           </span>
         ) : null}
@@ -209,6 +319,7 @@ function SidebarChildThreadRow(props: {
         openThreadKey={props.openThreadKey}
         providerEntryByInstanceId={props.providerEntryByInstanceId}
         onThreadActivate={props.onThreadActivate}
+        onContextMenu={props.onContextMenu}
         depth={props.depth + 1}
       />
     </li>

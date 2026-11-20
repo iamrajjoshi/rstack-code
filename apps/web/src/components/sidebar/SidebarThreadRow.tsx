@@ -1070,6 +1070,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       openThreadKey={props.openChildThreadKey ?? null}
       providerEntryByInstanceId={props.providerEntryByInstanceId}
       onThreadActivate={onThreadActivate}
+      onContextMenu={onContextMenu}
     />
   );
 
@@ -1776,6 +1777,8 @@ const scrollHighlightedResultIntoView = (node: HTMLLIElement | null) => {
 
 export const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   isSettled: boolean;
+  /** Set on a subagent listed under its matching ancestor. */
+  nested?: boolean | undefined;
   thread: SidebarThreadSummary;
   project: EnvironmentProject | null;
   projectDisplayName: string | null;
@@ -1874,7 +1877,7 @@ export const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props
     <li
       ref={props.isHighlighted ? scrollHighlightedResultIntoView : undefined}
       role="presentation"
-      className="list-none"
+      className={cn("list-none", props.nested && "ms-3 border-s border-sidebar-border/70 ps-1")}
       {...fileDropHandlers}
     >
       <Tooltip>

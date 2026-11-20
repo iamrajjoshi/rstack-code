@@ -12178,5 +12178,6 @@
   "51ffaef4f1687539": "{count, plural, one {{count} с ошибкой} few {{count} с ошибкой} many {{count} с ошибкой} other {{count} с ошибкой}}",
   "66b20c1a4015e2a8": "{count, plural, one {{count} готов} few {{count} готовы} many {{count} готовы} other {{count} готовы}}",
   "5d8a31c5377ec3d7": "Скрыть субагентов: {summary}",
-  "35376d3144ad77f3": "Показать субагентов: {summary}"
+  "35376d3144ad77f3": "Показать субагентов: {summary}",
+  "34cc896061b1317a": "{count, plural, one {Показать ещё {count}} few {Показать ещё {count}} many {Показать ещё {count}} other {Показать ещё {count}}}"
 }

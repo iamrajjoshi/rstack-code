@@ -12204,5 +12204,6 @@
   "51ffaef4f1687539": "{count, plural, other {{count} 个失败}}",
   "66b20c1a4015e2a8": "{count, plural, other {{count} 个已完成}}",
   "5d8a31c5377ec3d7": "隐藏子智能体：{summary}",
-  "35376d3144ad77f3": "显示子智能体：{summary}"
+  "35376d3144ad77f3": "显示子智能体：{summary}",
+  "34cc896061b1317a": "{count, plural, other {再显示 {count} 个}}"
 }

@@ -709,10 +709,12 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
       parent: string | null,
       activityRunStatus: "running" | null,
       settledDaysAgo: number | null = null,
+      updatedAtMs = 0,
     ) =>
       ({
         id: ThreadId.make(id),
         projectId: "project",
+        updatedAt: DateTime.makeUnsafe(updatedAtMs),
         archivedAt: null,
         status: activityRunStatus ?? "completed",
         activityRunStatus,
@@ -738,6 +740,11 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
       shell("remote-child-parent", "parent", null),
       // A listed thread's sidebar row nests its idle children.
       shell("nested", "parent", null),
+      // A parent with many idle children sends its newest five and counts the rest.
+      shell("coordinator", null, null),
+      ...Array.from({ length: 40 }, (_, index) =>
+        shell(`worker-${index}`, "coordinator", null, null, index),
+      ),
     ];
     const firstSnapshot = (input: {
       readonly omitIdleSubagents?: boolean;
@@ -789,6 +796,7 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
       );
 
     const recent = threads.slice(3, 28).map((thread) => thread.id);
+    const newestWorkers = ["worker-35", "worker-36", "worker-37", "worker-38", "worker-39"];
     const full = yield* firstSnapshot({});
     assert.deepEqual(
       full?.threads.map((thread) => thread.id),
@@ -798,14 +806,37 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
     const withoutChildren = yield* firstSnapshot({ omitIdleSubagents: true });
     assert.deepEqual(
       withoutChildren?.threads.map((thread) => thread.id),
-      ["parent", "live", ...recent, "old", "remote-parent", "remote-child-parent", "nested"],
+      [
+        "parent",
+        "live",
+        ...recent,
+        "old",
+        "remote-parent",
+        "remote-child-parent",
+        "nested",
+        "coordinator",
+        ...newestWorkers,
+      ],
     );
+    assert.deepEqual(withoutChildren?.omittedSubagents, [
+      { parentThreadId: ThreadId.make("coordinator"), count: 35 },
+    ]);
+    assert.isUndefined(full?.omittedSubagents);
     // A linked environment's clients nest its task under its parent, so that parent stays: an
     // older settled thread or an idle subagent.
     const withoutOld = yield* firstSnapshot({ omitIdleSubagents: true, omitOlderSettled: true });
     assert.deepEqual(
       withoutOld?.threads.map((thread) => thread.id),
-      ["parent", "live", ...recent, "remote-parent", "remote-child-parent", "nested"],
+      [
+        "parent",
+        "live",
+        ...recent,
+        "remote-parent",
+        "remote-child-parent",
+        "nested",
+        "coordinator",
+        ...newestWorkers,
+      ],
     );
     assert.deepEqual(withoutOld?.olderSettled?.counts, [
       { projectId: ProjectId.make("project"), count: 2 },
