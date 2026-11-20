@@ -9,6 +9,7 @@ import {
 } from "@t3tools/contracts";
 
 import { ConnectionBlockedError } from "./model.ts";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 export function orchestrationProtocolCompatibilityError(
   descriptor: ExecutionEnvironmentDescriptor,
@@ -31,8 +32,9 @@ export function orchestrationProtocolCompatibilityError(
     : new ConnectionBlockedError({
         reason: "unsupported",
         ...translatableDetail(
-          msg("This client requires a newer server. Update T3 Code on {host} to connect.", {
+          msg("This client requires a newer server. Update {app} on {host} to connect.", {
             host: descriptor.label,
+            app: PRODUCT_NAME,
           }),
         ),
         ...(canSelfUpdate(descriptor) ? { serverUpdateRequired: true } : {}),

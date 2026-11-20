@@ -27,7 +27,7 @@ import {
   previewPdfAssetUrl,
   resolveSearchUrlTemplate,
 } from "@t3tools/shared/preview";
-import { msg, T, useGT, useMessages } from "gt-react";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import {
@@ -109,6 +109,7 @@ import {
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { observeResize } from "~/lib/observeResize";
+import { APP_BASE_NAME } from "~/branding";
 
 interface Props {
   threadRef: ScopedThreadRef;
@@ -1133,7 +1134,9 @@ export function PreviewView({
           ) : (
             <div className="flex h-full items-center justify-center p-8 text-center">
               <p className="max-w-sm text-sm text-muted-foreground">
-                <T>This tab is open in the T3 Code desktop app.</T>
+                <T>
+                  This tab is open in the <Var>{APP_BASE_NAME}</Var> desktop app.
+                </T>
               </p>
             </div>
           )

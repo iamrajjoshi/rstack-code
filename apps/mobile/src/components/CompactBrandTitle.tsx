@@ -9,6 +9,7 @@ import { T3Wordmark } from "./T3Wordmark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../lib/mobileBranding";
 import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 const BRAND_MAX_FONT_SCALE = 1.4;
 const WORDMARK_SUFFIX = "Code";
@@ -42,7 +43,7 @@ export function CompactBrandTitle(
         props.fit && showStage ? (event) => setFullWidth(event.nativeEvent.layout.width) : undefined
       }
       aria-level={1}
-      accessibilityLabel={props.accessibilityLabel ?? gt("T3 Code, Threads")}
+      accessibilityLabel={props.accessibilityLabel ?? gt("{app}, Threads", { app: PRODUCT_NAME })}
       accessible
       role="heading"
       className="flex-row items-center gap-1.5"

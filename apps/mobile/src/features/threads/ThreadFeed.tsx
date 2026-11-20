@@ -333,6 +333,7 @@ import { loopbackUrlForDevice } from "../browser/browserTabs";
 import { useOpenLocalPreview } from "../browser/useOpenLocalPreview";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   // iOS blockquotes and selectable text measure separately; definite bubble width matches UIKit's drawing width.
@@ -2393,7 +2394,7 @@ function renderFeedEntry(
         >
           {presentation.attribution === "t3code" ? (
             <Text className="mb-1 pr-1 font-t3-medium text-2xs text-foreground-muted opacity-60">
-              {m(msg("Sent by T3 Code"))}
+              {m(msg("Sent by {app}"), { app: PRODUCT_NAME })}
             </Text>
           ) : null}
           {presentation.guestName !== undefined ? (

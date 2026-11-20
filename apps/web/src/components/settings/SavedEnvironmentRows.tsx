@@ -59,7 +59,7 @@ import { TunnelLimitAlert, TunnelUsageMeter } from "../cloud/TunnelUsage";
 import { environmentCatalog } from "~/connection/catalog";
 import { readEnvironmentScope } from "~/state/session";
 import { type EnvironmentPresentation, useRelayEnvironmentDiscovery } from "~/state/environments";
-import { APP_VERSION } from "~/branding";
+import { APP_VERSION, APP_BASE_NAME } from "~/branding";
 import { useManagedPolicy } from "~/state/managedPolicy";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useUpdateEnvironmentSettings } from "~/hooks/useSettings";
@@ -776,7 +776,9 @@ function ConfiguredCloudLinkRow({
       ) : (
         <SettingsRow
           title={setting("t3-connect").title}
-          description={gt("Run `t3 connect link` on the host, then restart T3 Code there.")}
+          description={gt("Run `t3 connect link` on the host, then restart {app} there.", {
+            app: APP_BASE_NAME,
+          })}
         />
       )}
       {signedOut && showSwitch ? null : (

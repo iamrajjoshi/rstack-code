@@ -9,7 +9,7 @@ import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
 
-import { APP_VERSION } from "./branding";
+import { APP_VERSION, APP_BASE_NAME } from "./branding";
 import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 import { m, type MessageResolver } from "./i18n/messages";
 
@@ -77,7 +77,9 @@ export function resolveVersionMismatch(
     clientVersion: normalizedClientVersion,
     serverVersion: normalizedServerVersion,
     hint: resolve(
-      msg("Version mismatch. Try syncing the client and server to the same T3 Code version."),
+      msg("Version mismatch. Try syncing the client and server to the same {app} version.", {
+        app: APP_BASE_NAME,
+      }),
     ),
   };
 }

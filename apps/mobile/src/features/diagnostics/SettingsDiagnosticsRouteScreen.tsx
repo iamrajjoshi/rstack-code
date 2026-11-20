@@ -7,7 +7,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { T, useGT } from "gt-react-native";
+import { T, useGT, Var } from "gt-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +27,7 @@ import {
   parseStartupCrashRecords,
   type StartupCrashRecord,
 } from "./crash-log-model";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 // expo-updates retains only seven days of logs.
 const LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -197,8 +198,8 @@ function CrashReportsSetting() {
       <Text className="px-2 text-sm leading-normal text-foreground-muted">
         <T>
           When the app crashes or hits an error, it sends the error message, the stack trace, the
-          app version, and the device model and OS version to the T3 Code team. Each launch also
-          sends startup timings. Reports carry a random ID for this install.
+          app version, and the device model and OS version to the <Var>{PRODUCT_NAME}</Var> team.
+          Each launch also sends startup timings. Reports carry a random ID for this install.
         </T>
       </Text>
     </View>

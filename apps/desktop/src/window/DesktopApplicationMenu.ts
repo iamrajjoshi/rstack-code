@@ -16,6 +16,7 @@ import { applyLanguage, m, onLocaleChange } from "../i18n/messages.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 export class DesktopApplicationMenuActionError extends Schema.TaggedError<DesktopApplicationMenuActionError>()(
   "DesktopApplicationMenuActionError",
@@ -78,8 +79,9 @@ const checkForUpdatesFromMenu = Effect.gen(function* () {
     yield* electronDialog.showMessageBox({
       type: "info",
       title: m(msg("You're up to date!")),
-      message: m(msg("T3 Code {version} is currently the newest version available."), {
+      message: m(msg("{app} {version} is currently the newest version available."), {
         version: updateState.currentVersion,
+        app: PRODUCT_NAME,
       }),
       buttons: [m(msg("OK"))],
     });
@@ -89,10 +91,14 @@ const checkForUpdatesFromMenu = Effect.gen(function* () {
       title: m(msg("Update available")),
       message:
         updateState.availableVersion === null
-          ? m(msg("A new version of T3 Code is available."))
-          : m(msg("T3 Code {version} is available."), { version: updateState.availableVersion }),
-      detail: m(msg("You're running T3 Code {version}."), {
+          ? m(msg("A new version of {app} is available."), { app: PRODUCT_NAME })
+          : m(msg("{app} {version} is available."), {
+              version: updateState.availableVersion,
+              app: PRODUCT_NAME,
+            }),
+      detail: m(msg("You're running {app} {version}."), {
         version: updateState.currentVersion,
+        app: PRODUCT_NAME,
       }),
       buttons: [
         m(msg("Download", { $context: "button, downloads an app update" })),
@@ -108,9 +114,10 @@ const checkForUpdatesFromMenu = Effect.gen(function* () {
       title: m(msg("Update downloading")),
       message:
         updateState.availableVersion === null
-          ? m(msg("A new version of T3 Code is already downloading."))
-          : m(msg("T3 Code {version} is already downloading."), {
+          ? m(msg("A new version of {app} is already downloading."), { app: PRODUCT_NAME })
+          : m(msg("{app} {version} is already downloading."), {
               version: updateState.availableVersion,
+              app: PRODUCT_NAME,
             }),
       buttons: [m(msg("OK"))],
     });
@@ -121,9 +128,11 @@ const checkForUpdatesFromMenu = Effect.gen(function* () {
       title: m(msg("Update ready")),
       message:
         version === null
-          ? m(msg("A new version of T3 Code is ready to install."))
-          : m(msg("T3 Code {version} is ready to install."), { version }),
-      detail: m(msg("T3 Code will restart to install it. Any running tasks will be interrupted.")),
+          ? m(msg("A new version of {app} is ready to install."), { app: PRODUCT_NAME })
+          : m(msg("{app} {version} is ready to install."), { version, app: PRODUCT_NAME }),
+      detail: m(msg("{app} will restart to install it. Any running tasks will be interrupted."), {
+        app: PRODUCT_NAME,
+      }),
       buttons: [m(msg("Restart", { $context: "button, restarts the app" })), m(msg("Later"))],
       defaultId: 0,
       cancelId: 1,

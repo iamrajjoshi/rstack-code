@@ -97,6 +97,7 @@ import { useEnvironments, useIssuesSupported } from "~/state/environments";
 import { issueEnvironment, useIssueList, type IssueListTarget } from "~/state/issues";
 import { useDebouncedValue } from "~/state/queries";
 import { primaryServerKeybindingsAtom } from "~/state/server";
+import { APP_BASE_NAME } from "~/branding";
 
 export interface IssuesSearch extends IssueListPreferences {
   readonly selectedEnvironmentId?: EnvironmentId | undefined;
@@ -475,7 +476,7 @@ export function IssuesPage() {
   const listBody: ReactNode = !issuesSupported ? (
     <PullRequestsUnavailableState
       title={gt("Issues unavailable")}
-      error={gt("Update this environment's T3 Code server to browse issues.")}
+      error={gt("Update this environment's {app} server to browse issues.", { app: APP_BASE_NAME })}
     />
   ) : noneAnswered && list.isPending ? (
     <PullRequestListGhost />

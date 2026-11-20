@@ -1,7 +1,7 @@
 // rstack-code: the fork's own identity on a machine, so it installs and runs beside T3 Code
 // without opening its data or answering its links.
 
-/** The product name in untranslated server and CLI messages. Translated strings keep their own. */
+/** The product name in server and CLI messages, and the `{app}` value in translated strings. */
 export const PRODUCT_NAME = "rstack code";
 
 /** The default T3 home, under the user's home directory. `T3CODE_HOME` still overrides it. */

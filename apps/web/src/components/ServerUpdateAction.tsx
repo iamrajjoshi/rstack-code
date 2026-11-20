@@ -43,6 +43,7 @@ import { crossesReleaseTrack } from "@t3tools/shared/cliRelease";
 import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { APP_BASE_NAME } from "~/branding";
 
 const UPDATE_STAGE_LABELS: Record<ServerUpdateStage, string> = {
   downloading: msg("Downloading…"),
@@ -222,8 +223,11 @@ export function ServerUpdatesAction({
         const confirmed =
           (await requestConfirmDialog(
             gt(
-              "Update the T3 Code desktop apps on {servers}? They will close and relaunch on those machines.",
-              { servers: desktopTargets.map((target) => target.serverLabel).join(", ") },
+              "Update the {app} desktop apps on {servers}? They will close and relaunch on those machines.",
+              {
+                servers: desktopTargets.map((target) => target.serverLabel).join(", "),
+                app: APP_BASE_NAME,
+              },
             ),
             { initialFocus: "confirm" },
           )) ?? true;
@@ -355,8 +359,8 @@ export function ServerUpdateAction({
       const confirmed =
         (await requestConfirmDialog(
           gt(
-            "Update the T3 Code desktop app that runs the {serverLabel}? It will close and relaunch on that machine.",
-            { serverLabel },
+            "Update the {app} desktop app that runs the {serverLabel}? It will close and relaunch on that machine.",
+            { serverLabel, app: APP_BASE_NAME },
           ),
           { initialFocus: "confirm" },
         )) ?? true;

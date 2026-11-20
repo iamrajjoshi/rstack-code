@@ -1,6 +1,7 @@
 import type { ServerEventLoopStall } from "@t3tools/contracts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 export interface HostFreezeNotice {
   readonly title: string;
@@ -33,6 +34,8 @@ export function hostFreezeNotice(
               cpuCount,
             }),
           )
-        : resolve(msg("T3 Code on {host} was too busy to answer.", { host: hostLabel })),
+        : resolve(
+            msg("{app} on {host} was too busy to answer.", { host: hostLabel, app: PRODUCT_NAME }),
+          ),
   };
 }

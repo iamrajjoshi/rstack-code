@@ -31,6 +31,7 @@ import {
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { APP_BASE_NAME } from "~/branding";
 
 const DismissedEnvironmentIds = Schema.Array(Schema.String);
 const reclaimPermissionsAtom = environmentAtomList(
@@ -161,8 +162,9 @@ function ReclaimRow({
       toastManager.add({
         type: "success",
         title: gt("Reclaiming {amount} on {environment}", { amount, environment: label }),
-        description: gt("T3 Code there restarts and is back in about {minutes} min.", {
+        description: gt("{app} there restarts and is back in about {minutes} min.", {
           minutes,
+          app: APP_BASE_NAME,
         }),
       });
       return;
@@ -184,7 +186,10 @@ function ReclaimRow({
       title={gt("{amount} on {environment}", { amount, environment: label })}
       description={
         status.reclaimFailure === undefined
-          ? gt("Restarts T3 Code there. It will be offline for about {minutes} min.", { minutes })
+          ? gt("Restarts {app} there. It will be offline for about {minutes} min.", {
+              minutes,
+              app: APP_BASE_NAME,
+            })
           : gt("The last attempt failed: {reason}", { reason: status.reclaimFailure })
       }
       control={
@@ -208,9 +213,9 @@ function ReclaimRow({
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   <T>
-                    T3 Code on <Var>{label}</Var> stops, rebuilds its database, and starts again. It
-                    will be offline for about <Var>{minutes}</Var> min. Running agents stop when it
-                    restarts.
+                    <Var>{APP_BASE_NAME}</Var> on <Var>{label}</Var> stops, rebuilds its database,
+                    and starts again. It will be offline for about <Var>{minutes}</Var> min. Running
+                    agents stop when it restarts.
                   </T>
                 </AlertDialogDescription>
               </AlertDialogHeader>

@@ -6,12 +6,12 @@ import {
 import { parseNewThreadLink, parseThreadLinkPrompt } from "@t3tools/shared/promptLinksCopy";
 import { useLocation } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
-import { msg, T, useGT, useMessages } from "gt-react";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { MessageResolver } from "../../i18n/messages";
 
-import { DESKTOP_DOWNLOAD_URL } from "~/branding";
+import { DESKTOP_DOWNLOAD_URL, APP_BASE_NAME } from "~/branding";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { isHostedStaticApp } from "~/hostedPairing";
 import { useEnvironments } from "~/state/environments";
@@ -50,7 +50,9 @@ function summarize(
           ? {
               title: resolve(msg("Open this thread")),
               description: resolve(
-                msg("It opens in T3 Code if you're connected to the machine it runs on."),
+                msg("It opens in {app} if you're connected to the machine it runs on.", {
+                  app: APP_BASE_NAME,
+                }),
               ),
               prompt: null,
               details: [],
@@ -172,8 +174,8 @@ function HostedPromptLinkLanding({
           </AlertTitle>
           <AlertDescription>
             {gt(
-              "{count, plural, one {T3 Code removed {count} hidden character. Read the prompt before you send it.} other {T3 Code removed {count} hidden characters. Read the prompt before you send it.}}",
-              { count: prompt.hiddenCharacters },
+              "{count, plural, one {{app} removed {count} hidden character. Read the prompt before you send it.} other {{app} removed {count} hidden characters. Read the prompt before you send it.}}",
+              { count: prompt.hiddenCharacters, app: APP_BASE_NAME },
             )}
           </AlertDescription>
         </Alert>
@@ -196,7 +198,9 @@ function HostedPromptLinkLanding({
           </Button>
         ) : null}
         <Button variant="ghost" render={<a href={DESKTOP_DOWNLOAD_URL} />}>
-          <T>Get T3 Code</T>
+          <T>
+            Get <Var>{APP_BASE_NAME}</Var>
+          </T>
         </Button>
       </div>
       <label className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">

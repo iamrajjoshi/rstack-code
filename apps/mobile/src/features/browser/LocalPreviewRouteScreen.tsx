@@ -15,6 +15,7 @@ import { useAppearancePreferences } from "../settings/appearance/AppearancePrefe
 import { BrowserChrome } from "./BrowserBar";
 import { loopbackUrlForDevice } from "./browserTabs";
 import { TunnelWebView, type TunnelNavigation, type TunnelWebViewRef } from "./TunnelWebView";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 type LocalPreviewRouteScreenProps = StaticScreenProps<{
   readonly environmentId: string;
@@ -153,7 +154,10 @@ export function LocalPreviewScreen(props: {
                     variant="plain"
                     title={
                       outdated
-                        ? gt("Update T3 Code on {environment}", { environment: environmentLabel })
+                        ? gt("Update {app} on {environment}", {
+                            environment: environmentLabel,
+                            app: PRODUCT_NAME,
+                          })
                         : disconnected
                           ? gt("Not connected to {environment}", { environment: environmentLabel })
                           : gt("Can't reach {host}", { host: hostOf(current) })
@@ -161,8 +165,8 @@ export function LocalPreviewScreen(props: {
                     detail={
                       outdated
                         ? gt(
-                            "{environment} runs a version of T3 Code that can't open its localhost pages on this device. Update it there, then try again.",
-                            { environment: environmentLabel },
+                            "{environment} runs a version of {app} that can't open its localhost pages on this device. Update it there, then try again.",
+                            { environment: environmentLabel, app: PRODUCT_NAME },
                           )
                         : disconnected
                           ? gt(

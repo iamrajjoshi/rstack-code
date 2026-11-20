@@ -135,6 +135,7 @@ import {
 } from "./pullRequestProjectAssignment.logic";
 
 import { changeRequestTermKind } from "./changeRequestTerm";
+import { APP_BASE_NAME } from "~/branding";
 
 function getShortcutContext() {
   return {
@@ -1261,7 +1262,7 @@ export function PullRequestsPage() {
       ) : !pullRequestsSupported ? (
         <PullRequestsUnavailableState
           title={gt("Pull requests unavailable")}
-          error={gt("Update your T3 Code servers to browse pull requests.")}
+          error={gt("Update your {app} servers to browse pull requests.", { app: APP_BASE_NAME })}
         />
       ) : firstLoad ? (
         <PullRequestListGhost rows={7} caption={gt("Loading pull requests…")} />

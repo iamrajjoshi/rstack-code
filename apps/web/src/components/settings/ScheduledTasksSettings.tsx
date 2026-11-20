@@ -153,6 +153,7 @@ import {
   SettingsSection,
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
 } from "./settingsLayout";
+import { APP_BASE_NAME } from "~/branding";
 
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 const WEEKDAY_SHORT = [
@@ -1643,7 +1644,8 @@ function ScheduledTaskEditorForm({
       reportFailure(
         gt("Once is not available here"),
         gt(
-          "This environment runs an older T3 Code. Update it to schedule a one-time task, or pick another schedule.",
+          "This environment runs an older {app}. Update it to schedule a one-time task, or pick another schedule.",
+          { app: APP_BASE_NAME },
         ),
       );
       return;

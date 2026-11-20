@@ -36,7 +36,12 @@ import { createModelSelection, pickModelSelection } from "@t3tools/shared/model"
 import { resolvePastedPath } from "@t3tools/shared/path";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
-import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import {
+  APP_VERSION,
+  HOSTED_APP_CHANNEL,
+  HOSTED_APP_CHANNEL_LABEL,
+  APP_BASE_NAME,
+} from "../../branding";
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
@@ -2512,7 +2517,9 @@ export function AboutSettingsPanel() {
           {...setting("privacy-policy")}
           description={
             telemetryOff === undefined
-              ? gt("How we handle your data, including the anonymous usage data T3 Code collects.")
+              ? gt("How we handle your data, including the anonymous usage data {app} collects.", {
+                  app: APP_BASE_NAME,
+                })
               : gt("How we handle your data. {telemetryOff}", { telemetryOff })
           }
           control={
@@ -2527,7 +2534,9 @@ export function AboutSettingsPanel() {
         />
         <SettingsRow
           {...setting("open-source-licenses")}
-          description={gt("Notices for dependencies, assets, and optional tools used by T3 Code.")}
+          description={gt("Notices for dependencies, assets, and optional tools used by {app}.", {
+            app: APP_BASE_NAME,
+          })}
           control={
             <Button
               render={<Link to="/settings/open-source-licenses" />}

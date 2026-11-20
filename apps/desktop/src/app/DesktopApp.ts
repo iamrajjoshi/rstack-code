@@ -44,6 +44,7 @@ import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts"
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { msg } from "gt-i18n";
 import { m } from "../i18n/messages.ts";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
@@ -149,7 +150,7 @@ const handleFatalStartupError = Effect.fn("desktop.startup.handleFatalStartupErr
   const wasQuitting = yield* Ref.getAndSet(state.quitting, true);
   if (!wasQuitting) {
     yield* electronDialog.showErrorBox(
-      m(msg("T3 Code failed to start")),
+      m(msg("{app} failed to start"), { app: PRODUCT_NAME }),
       `Stage: ${stage}\n${message}${detail}`,
     );
   }

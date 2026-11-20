@@ -3,6 +3,7 @@ import { isListedThreadLineage } from "@t3tools/contracts";
 import type { EnvironmentProject, EnvironmentThreadShell } from "./models.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 export function planProjectRemoval<
   Thread extends Pick<EnvironmentThreadShell, "environmentId" | "projectId" | "lineage">,
@@ -71,13 +72,16 @@ export function planProjectRemoval<
       ? [
           resolve(
             msg(
-              "Those threads and any archived threads are deleted from T3 Code. Provider sessions are kept.",
+              "Those threads and any archived threads are deleted from {app}. Provider sessions are kept.",
+              { app: PRODUCT_NAME },
             ),
           ),
         ]
       : [
           resolve(
-            msg("Any archived threads are deleted from T3 Code. Provider sessions are kept."),
+            msg("Any archived threads are deleted from {app}. Provider sessions are kept.", {
+              app: PRODUCT_NAME,
+            }),
           ),
         ]),
     isWholeGroup && !hasOtherMembers

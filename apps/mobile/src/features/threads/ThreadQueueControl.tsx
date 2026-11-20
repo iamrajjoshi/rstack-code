@@ -47,6 +47,7 @@ import {
   buildCancelQueuedRunCommand,
   resolveThreadQueueRowControls,
 } from "./threadQueueControlPresentation";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 const REMOVE_ACTION_WIDTH = 76;
 const THUMBNAIL_LIMIT = 3;
@@ -103,7 +104,7 @@ function QueuedRunSender(props: {
             label: senderShell?.title.trim() || linkedSender?.title.trim() || gt("Agent"),
           }
         : attribution === "t3code"
-          ? { icon: null, label: gt("Sent by T3 Code") }
+          ? { icon: null, label: gt("Sent by {app}", { app: PRODUCT_NAME }) }
           : null;
   if (sender === null) return null;
   return (

@@ -112,6 +112,7 @@ import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
+import { APP_BASE_NAME } from "~/branding";
 
 export interface RightPanelTabsProps {
   mode: PreviewPanelMode;
@@ -180,7 +181,9 @@ function shouldOpenDefaultBrowserProfileFromMenuClick(pointerType: string | unde
 }
 
 const SURFACE_DISABLED_REASONS = {
-  browser: msg("Browser previews are only available in the T3 Code desktop app."),
+  browser: msg("Browser previews are only available in the {app} desktop app.", {
+    app: APP_BASE_NAME,
+  }),
   terminal: msg("Terminal surfaces are only available from a project thread."),
   files: msg("Files are only available when a project is open."),
   diff: msg("Diff is only available for server threads in Git repositories."),

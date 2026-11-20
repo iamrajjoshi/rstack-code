@@ -36,6 +36,7 @@ import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import { m } from "../i18n/messages.ts";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 const { logWarning: logBackendPoolWarning } =
   DesktopObservability.makeComponentLogger("desktop-backend-pool");
@@ -192,7 +193,7 @@ export const layer = Layer.effect(
           );
           yield* electronDialog.showErrorBox(
             m(msg("WSL backend is still unavailable")),
-            `${reason}\n\n${m(msg("T3 Code will use the Windows backend for this launch and retry WSL the next time the app starts."))}`,
+            `${reason}\n\n${m(msg("{app} will use the Windows backend for this launch and retry WSL the next time the app starts."), { app: PRODUCT_NAME })}`,
           );
           yield* appSettings.applyWslWindowsFallbackInMemory;
           return true;
@@ -203,7 +204,7 @@ export const layer = Layer.effect(
         });
         yield* electronDialog.showErrorBox(
           m(msg("WSL backend couldn't start")),
-          `${reason}\n\n${m(msg("Falling back to the Windows backend so T3 Code can open. Re-enable the WSL backend from Settings > Sharing & access once the WSL distro is fixed."))}`,
+          `${reason}\n\n${m(msg("Falling back to the Windows backend so {app} can open. Re-enable the WSL backend from Settings > Sharing & access once the WSL distro is fixed."), { app: PRODUCT_NAME })}`,
         );
         // Clear wslOnly too so enabling WSL cannot restore a failed mode.
         // Keep the in-memory fallback if persistence fails.

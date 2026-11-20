@@ -48,6 +48,7 @@ import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { m as resolveMessage } from "../../i18n/messages";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { useSearchableSetting } from "./settingsSearch";
+import { APP_BASE_NAME } from "~/branding";
 
 // Console log labels for the atom commands.
 const UNLINK_COMMAND_LABEL = "unlink environment";
@@ -100,7 +101,8 @@ export function LinkedEnvironmentsSettings({
         <SettingsRow
           title={gt("No linked environments")}
           description={gt(
-            "Link another machine running T3 Code, such as a VPS, so agents here can launch and drive threads there.",
+            "Link another machine running {app}, such as a VPS, so agents here can launch and drive threads there.",
+            { app: APP_BASE_NAME },
           )}
         />
       ) : (

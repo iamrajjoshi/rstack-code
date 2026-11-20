@@ -12,6 +12,7 @@ import { msg } from "gt-i18n";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { m } from "../i18n/messages.ts";
 import { BACKEND_QUIT_STOP_TIMEOUT } from "./DesktopBackendManager.ts";
+import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
 
 // The fields of the server's `server-runtime.json` that identify the owner of a T3 home.
 const HomeOwnerRuntimeState = Schema.Struct({
@@ -96,26 +97,28 @@ export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
     onNone: () =>
       m(
         msg(
-          "Another T3 Code server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's T3 home to each command. Then reopen T3 Code. You can also set a separate T3CODE_HOME and pair with the running server.",
+          "Another {app} server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's T3 home to each command. Then reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
         ),
+        { app: PRODUCT_NAME },
       ),
     onSome: (owner) => {
       const variables = {
         pid: String(owner.pid),
         port: String(owner.port),
         version: owner.serverVersion ?? "",
+        app: PRODUCT_NAME,
       };
       if (owner.serviceManaged) {
         return owner.serverVersion
           ? m(
               msg(
-                "The T3 Code background service is using this T3 home (PID {pid}, port {port}, version {version}). Stop it with `t3 service uninstall`, passing `--base-dir` with this T3 home, and reopen T3 Code. You can also set a separate T3CODE_HOME and pair with the running server.",
+                "The {app} background service is using this T3 home (PID {pid}, port {port}, version {version}). Stop it with `t3 service uninstall`, passing `--base-dir` with this T3 home, and reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
               ),
               variables,
             )
           : m(
               msg(
-                "The T3 Code background service is using this T3 home (PID {pid}, port {port}). Stop it with `t3 service uninstall`, passing `--base-dir` with this T3 home, and reopen T3 Code. You can also set a separate T3CODE_HOME and pair with the running server.",
+                "The {app} background service is using this T3 home (PID {pid}, port {port}). Stop it with `t3 service uninstall`, passing `--base-dir` with this T3 home, and reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
               ),
               variables,
             );
@@ -123,13 +126,13 @@ export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
       return owner.serverVersion
         ? m(
             msg(
-              "Another T3 Code server (for example `t3 serve`, or one started over SSH) is using this T3 home (PID {pid}, port {port}, version {version}). If a T3 Code app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server, and reopen T3 Code. You can also set a separate T3CODE_HOME and pair with the running server.",
+              "Another {app} server (for example `t3 serve`, or one started over SSH) is using this T3 home (PID {pid}, port {port}, version {version}). If a {app} app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server, and reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
             ),
             variables,
           )
         : m(
             msg(
-              "Another T3 Code server (for example `t3 serve`, or one started over SSH) is using this T3 home (PID {pid}, port {port}). If a T3 Code app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server, and reopen T3 Code. You can also set a separate T3CODE_HOME and pair with the running server.",
+              "Another {app} server (for example `t3 serve`, or one started over SSH) is using this T3 home (PID {pid}, port {port}). If a {app} app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server, and reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
             ),
             variables,
           );
