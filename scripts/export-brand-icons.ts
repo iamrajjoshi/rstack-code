@@ -66,7 +66,7 @@ interface IconComposerTool {
   readonly path: string;
   readonly version: string;
   readonly bundleVersion: string;
-  readonly supportsDesignGeneration: boolean;
+  readonly selectsDesignGeneration: boolean;
 }
 
 interface CommandResult {
@@ -132,20 +132,17 @@ export class IconExportCommandFailedError extends Schema.TaggedError<IconExportC
 export class IconExportToolResolutionError extends Schema.TaggedError<IconExportToolResolutionError>()(
   "IconExportToolResolutionError",
   {
-    reason: Schema.Literals(["configured-invalid", "configured-outdated", "not-found"]),
+    reason: Schema.Literals(["configured-invalid", "not-found"]),
     designGeneration: Schema.Int,
     toolPath: Schema.optional(Schema.String),
-    version: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
     switch (this.reason) {
       case "configured-invalid":
         return `ICON_COMPOSER_TOOL does not point to Icon Composer's export-capable ictool: ${this.toolPath}`;
-      case "configured-outdated":
-        return `ICON_COMPOSER_TOOL points to Icon Composer ${this.version}, but version 2 or newer is required for design generation ${this.designGeneration}.`;
       case "not-found":
-        return `Could not find an Icon Composer 2.x exporter compatible with design generation ${this.designGeneration}. Install a compatible Icon Composer/Xcode or set ICON_COMPOSER_TOOL to Icon Composer.app/Contents/Executables/ictool.`;
+        return `Could not find an Icon Composer exporter for design generation ${this.designGeneration}. Install a compatible Icon Composer/Xcode or set ICON_COMPOSER_TOOL to Icon Composer.app/Contents/Executables/ictool.`;
     }
   }
 }
@@ -402,7 +399,8 @@ const probeIconComposerTool = Effect.fn("iconExport.probeIconComposerTool")(func
     path: candidate,
     version: `${shortVersion} (${bundleVersion})`,
     bundleVersion,
-    supportsDesignGeneration: Number.parseInt(shortVersion, 10) >= 2,
+    // Icon Composer 1.x has no --design-generation flag; it only renders design generation 26.
+    selectsDesignGeneration: Number.parseInt(shortVersion, 10) >= 2,
   });
 });
 
@@ -417,14 +415,6 @@ const resolveIconComposerTool = Effect.fn("iconExport.resolveIconComposerTool")(
         reason: "configured-invalid",
         designGeneration: DESIGN_GENERATION,
         toolPath: configuredTool,
-      });
-    }
-    if (!tool.value.supportsDesignGeneration) {
-      return yield* new IconExportToolResolutionError({
-        reason: "configured-outdated",
-        designGeneration: DESIGN_GENERATION,
-        toolPath: configuredTool,
-        version: tool.value.version,
       });
     }
     return tool.value;
@@ -462,7 +452,6 @@ const resolveIconComposerTool = Effect.fn("iconExport.resolveIconComposerTool")(
   const compatibleTools = probed
     .filter(Option.isSome)
     .map((tool) => tool.value)
-    .filter((tool) => tool.supportsDesignGeneration)
     .sort((left, right) =>
       right.bundleVersion.localeCompare(left.bundleVersion, undefined, { numeric: true }),
     );
@@ -476,13 +465,14 @@ const resolveIconComposerTool = Effect.fn("iconExport.resolveIconComposerTool")(
 });
 
 const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
-  toolPath: string,
+  tool: IconComposerTool,
   sourcePath: string,
   outputPath: string,
   platform: IconPlatform,
   size: number,
 ) {
   const fs = yield* FileSystem.FileSystem;
+  const toolPath = tool.path;
   const args = [
     sourcePath,
     "--export-image",
@@ -498,8 +488,7 @@ const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
     String(size),
     "--scale",
     "1",
-    "--design-generation",
-    String(DESIGN_GENERATION),
+    ...(tool.selectsDesignGeneration ? ["--design-generation", String(DESIGN_GENERATION)] : []),
   ];
   const result = yield* runCommand(toolPath, args);
   if (result.exitCode !== 0) {
@@ -548,7 +537,7 @@ const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
 });
 
 const renderVariant = Effect.fn("iconExport.renderVariant")(function* (
-  toolPath: string,
+  tool: IconComposerTool,
   repositoryRoot: string,
   temporaryDirectory: string,
   variant: IconVariant,
@@ -580,7 +569,7 @@ const renderVariant = Effect.fn("iconExport.renderVariant")(function* (
     if (cached) return cached;
 
     const outputPath = path.join(temporaryDirectory, `${variant.label}-${platform}-${size}.png`);
-    const contents = yield* renderIcon(toolPath, sourcePath, outputPath, platform, size);
+    const contents = yield* renderIcon(tool, sourcePath, outputPath, platform, size);
     renditionCache.set(cacheKey, contents);
     return contents;
   });
@@ -724,12 +713,7 @@ export const exportBrandIcons = Effect.fn("exportBrandIcons")(function* (checkOn
   const generated = new Map<string, Buffer>();
   for (const variant of ICON_VARIANTS) {
     yield* Console.log(`Rendering ${variant.label} from ${variant.source}...`);
-    const variantAssets = yield* renderVariant(
-      tool.path,
-      repositoryRoot,
-      temporaryDirectory,
-      variant,
-    );
+    const variantAssets = yield* renderVariant(tool, repositoryRoot, temporaryDirectory, variant);
     for (const [relativePath, contents] of variantAssets) {
       generated.set(relativePath, contents);
     }

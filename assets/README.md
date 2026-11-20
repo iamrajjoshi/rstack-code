@@ -6,11 +6,13 @@ The three Icon Composer projects are the source of truth for full application ic
 - `nightly/app-icon.icon`
 - `prod/app-icon.icon`
 
-Each project uses `text.svg` for rstack code's placeholder "rs" mark on a solid fill. Additional layers use semantic names that describe their role and placement.
+Each project uses `text.svg` for rstack code's mark, three offset bars, on a flat `#131318` fill with shadow, specular and translucency turned off. The variants differ only in bar colours: production has a magenta top bar over blue, development a light top bar over blue, and nightly a blue top bar over magenta. Additional layers use semantic names that describe their role and placement.
 
 Run `vp run icons:export` from the repository root to regenerate the tracked iOS, Linux, Windows, and web assets. The development web exports are also copied to `apps/web/public` for the browser favicon, web app manifest icons, and splash screen. Run `vp run icons:check` to verify that the generated assets and public copies match their sources without changing files.
 
-Exporting requires Icon Composer 2 or newer on macOS. The script selects the newest compatible exporter from Xcode or a standalone Icon Composer installation and pins design generation 26. Set `ICON_COMPOSER_TOOL` to the full path of `Icon Composer.app/Contents/Executables/ictool` to override automatic discovery.
+Exporting requires Icon Composer on macOS. The script selects the newest exporter from Xcode or a standalone Icon Composer installation and pins design generation 26. Icon Composer 1.x (bundled with Xcode 26.3) has no `--design-generation` flag and only renders generation 26, so it is used without the flag when no Icon Composer 2 is installed. Set `ICON_COMPOSER_TOOL` to the full path of `Icon Composer.app/Contents/Executables/ictool` to override automatic discovery.
+
+The tracked assets were exported with Icon Composer 1.2 (76). Icon Composer 2 renders are not byte-identical, so on a machine with Icon Composer 2, `vp run icons:check` reports the assets as stale until `vp run icons:export` is rerun and the result committed.
 
 ## macOS exports
 
@@ -30,6 +32,8 @@ Save the three exports to:
 - `prod/app-icon.icon` -> `prod/black-macos-1024.png`
 
 The result must be a 1024×1024 PNG with the classic macOS safe area: the opaque icon body is 824×824, inset 100 pixels on every side, with only the native Icon Composer shadow extending into the surrounding transparent canvas.
+
+The tracked macOS PNGs are currently a stand-in rather than native exports: each is the Icon Composer 1.2 `iOS` rendition exported at 824×824 from the command line, placed at a 100 pixel inset on a transparent 1024×1024 canvas over a black drop shadow (30% opacity, 6 pixels down, 12 pixel Gaussian blur). Replace them with native `macOS pre-Tahoe` exports using the steps above when that preset is available.
 
 To have Codex perform the native exports, paste this prompt into a task opened at the repository root:
 
