@@ -956,7 +956,11 @@ function delegatedCompletionWakeDetail(
       const task = tasks.find((candidate) => candidate.id === taskId);
       // A follow-up gets a fresh task id; the child thread links it to the task delegate_task returned.
       const thread = task?.childThreadId == null ? "" : ` in child thread ${task.childThreadId}`;
-      const label = `Delegated task ${taskId}${task?.title == null ? "" : ` (${task.title})`}${thread}${task === undefined ? " reached a terminal state" : ` [${task.status}]`}`;
+      const checkout =
+        task?.worktreePath === undefined
+          ? ""
+          : `${task.branch === undefined ? "" : ` on branch ${task.branch}`} in worktree ${task.worktreePath}`;
+      const label = `Delegated task ${taskId}${task?.title == null ? "" : ` (${task.title})`}${thread}${task === undefined ? " reached a terminal state" : ` [${task.status}]`}${checkout}`;
       if (task?.result != null) {
         const detail = `${label}:\n${task.result}`;
         const bytes = Buffer.byteLength(detail);
@@ -14930,11 +14934,16 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const parentTurnItem = parentTask.turnItems.find(
         (candidate) => candidate.type === "subagent" && candidate.subagentId === task.id,
       );
+      // A shared child works in the parent's checkout, which the parent already knows.
+      const { worktreePath, branch } = childControls.thread;
+      const ownCheckout =
+        worktreePath !== null && worktreePath !== parentProjection.thread.worktreePath;
       const updatedTask: OrchestrationV2Subagent = {
         ...task,
         providerThreadId: childRun.providerThreadId,
         status: terminalStatus,
         result: result.text,
+        ...(ownCheckout ? { worktreePath, ...(branch === null ? {} : { branch }) } : {}),
         completedAt: now,
         updatedAt: now,
         // The cancelling parent gets no wake, and the task records the run it settled from.

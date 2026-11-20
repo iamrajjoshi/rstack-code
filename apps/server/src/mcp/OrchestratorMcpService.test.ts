@@ -441,6 +441,7 @@ describe("OrchestratorMcpService", () => {
           },
         ],
       } as unknown as OrchestrationV2ThreadProjection;
+      let preparing = false;
       let providerStarted = false;
       const childProjection = () =>
         ({
@@ -455,7 +456,7 @@ describe("OrchestratorMcpService", () => {
             {
               id: childRunId,
               ordinal: 1,
-              status: providerStarted ? "running" : "starting",
+              status: preparing ? "preparing" : providerStarted ? "running" : "starting",
               startedAt: providerStarted ? DateTime.makeUnsafe("2026-10-24T10:00:00Z") : null,
               delegatedTaskId: taskId,
               workspacePreparation: { type: "worktree", baseRef: "abc123" },
@@ -501,6 +502,12 @@ describe("OrchestratorMcpService", () => {
 
       yield* Effect.gen(function* () {
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+        // Launch returns before the worktree and its final branch name exist.
+        preparing = true;
+        const prepared = yield* service.taskStatus(scope, taskId);
+        assert.equal(prepared.workspace?.isolation, "worktree");
+        assert.isString(prepared.workspace?.note);
+        preparing = false;
         const waiting = yield* service.taskStatus(scope, taskId);
         assert.equal(waiting.status, "starting");
         assert.equal(waiting.workState, "working");

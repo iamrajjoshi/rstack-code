@@ -980,6 +980,9 @@ export const OrchestrationV2Subagent = Schema.Struct({
   model: Schema.NullOr(Schema.String),
   modelSelection: Schema.optional(ModelSelection),
   executedModel: Schema.optional(Schema.String),
+  /** The child's own checkout when the task settled, for its completion notice. */
+  worktreePath: Schema.optional(Schema.String),
+  branch: Schema.optional(Schema.String),
   completionWake: Schema.optional(Schema.Literals(["always", "settled_only"])),
   completionDelivery: Schema.optional(OrchestrationV2DelegatedCompletionTaskDelivery),
   // The run whose unfinished task was cancelled, committed with its Stop.

@@ -563,17 +563,30 @@ function hasPendingChildRuns(
   );
 }
 
-/** A shared child keeps the parent's checkout; a worktree child gets its own once launch creates it. */
+/**
+ * A shared child keeps the parent's checkout; a worktree child gets its own once launch creates it.
+ * Launch returns while the worktree is still being created, and its branch is renamed before the
+ * run leaves "preparing".
+ */
 function delegatedTaskWorkspace(
   childProjection: Pick<OrchestrationV2ThreadProjection, "thread" | "runs">,
+  delegatedRun: OrchestrationV2Run | undefined,
 ): NonNullable<OrchestratorMcpDelegateTaskResult["workspace"]> {
   const { worktreePath, branch } = childProjection.thread;
+  const isolation = childProjection.runs.some(
+    (run) => run.workspacePreparation?.type === "worktree",
+  )
+    ? "worktree"
+    : "shared";
   return {
-    isolation: childProjection.runs.some((run) => run.workspacePreparation?.type === "worktree")
-      ? "worktree"
-      : "shared",
+    isolation,
     ...(worktreePath === null ? {} : { worktreePath }),
     ...(branch === null ? {} : { branch }),
+    ...(isolation === "worktree" && delegatedRun?.status === "preparing"
+      ? {
+          note: "Still being created; task_status and the completion notice give its final branch.",
+        }
+      : {}),
   };
 }
 
@@ -1957,7 +1970,7 @@ const make = Effect.gen(function* () {
         isTerminalTaskStatus(status) || task.completionDelivery?.state === "disposed"
           ? null
           : pendingTaskApproval(childControls, task.id, childRun),
-      workspace: delegatedTaskWorkspace(childControls),
+      workspace: delegatedTaskWorkspace(childControls, childRun),
       waitTimedOut,
     } satisfies OrchestratorMcpDelegateTaskResult;
     const response: OrchestratorMcpDelegateTaskResult =

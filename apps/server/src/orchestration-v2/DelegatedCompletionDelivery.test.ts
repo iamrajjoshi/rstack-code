@@ -879,6 +879,8 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
             status,
             title: "Inspect regression",
             childThreadId: ThreadId.make(`thread:inline-budget-child:${id}`),
+            worktreePath: `/repo/.t3/worktrees/${id}`,
+            branch: `t3/${id}`,
           },
         })),
       });
@@ -905,7 +907,7 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
       const deferredTaskId = testCase.inlineFirst ? secondTaskId : firstTaskId;
       assert.include(
         message.text,
-        `Delegated task ${deferredTaskId} (Inspect regression) in child thread thread:inline-budget-child:${deferredTaskId} [${testCase.inlineFirst ? "cancelled" : "failed"}]`,
+        `Delegated task ${deferredTaskId} (Inspect regression) in child thread thread:inline-budget-child:${deferredTaskId} [${testCase.inlineFirst ? "cancelled" : "failed"}] on branch t3/${deferredTaskId} in worktree /repo/.t3/worktrees/${deferredTaskId}.`,
       );
       assert.include(message.text, `Use task_status with taskId ${deferredTaskId}`);
       assert.deepEqual(message.delegatedCompletion?.taskIds, [firstTaskId, secondTaskId]);
@@ -1415,6 +1417,7 @@ const seedRestartCancelledChild = (input: {
   readonly continuationPending: boolean;
   readonly runStatus?: "cancelled" | "completed";
   readonly lostWork?: OrchestrationV2Run["restartCancelledBackgroundWork"];
+  readonly checkout?: { readonly worktreePath: string; readonly branch: string };
   readonly now: DateTime.Utc;
 }) =>
   Effect.gen(function* () {
@@ -1440,8 +1443,8 @@ const seedRestartCancelledChild = (input: {
             modelSelection,
             runtimeMode: "full-access",
             interactionMode: "default",
-            branch: null,
-            worktreePath: null,
+            branch: input.checkout?.branch ?? null,
+            worktreePath: input.checkout?.worktreePath ?? null,
             activeProviderThreadId: null,
             lineage: {
               parentThreadId: input.parentThreadId,
@@ -5119,6 +5122,7 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
         completionWake: "always",
         continuationPending: false,
         runStatus: "completed",
+        checkout: { worktreePath: "/repo/.t3/worktrees/t3-child", branch: "t3/silent-report" },
         now,
       });
       yield* eventSink.write({
@@ -5160,6 +5164,9 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
       );
       assert.equal(task?.status, "completed");
       assert.equal(task?.result, "REPORT-OK");
+      // The completion notice names the child's own checkout as it was when the task settled.
+      assert.equal(task?.worktreePath, "/repo/.t3/worktrees/t3-child");
+      assert.equal(task?.branch, "t3/silent-report");
     }),
   );
 
