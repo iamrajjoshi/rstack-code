@@ -19,5 +19,11 @@ export const DESKTOP_APP_DEVELOPMENT_SCHEME = "rstackcode-dev";
  */
 export const LINUX_DESKTOP_APP_ID = "com.iamrajjoshi.RstackCode";
 
+/** The background service: systemd unit `<name>.service`, Windows task and folder. */
+export const BOOT_SERVICE_NAME = "rstack-code";
+
+/** The background service's launchd label, apart from the desktop bundle id so TCC records never collide. */
+export const BOOT_SERVICE_LAUNCHD_LABEL = "com.iamrajjoshi.rstackcode.service";
+
 /** Matches the desktop app's URL scheme on any channel, such as `rstackcode:` or `rstackcode-dev:`. */
 export const APP_LINK_PROTOCOL = /^rstackcode(?:-[a-z]+)?:$/;

@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { runSshCommand, baseSshArgs, resolveSshCommand } from "@t3tools/ssh/command";
 import { SshCommandError } from "@t3tools/ssh/errors";
+import { DEFAULT_T3_HOME_DIRECTORY_NAME } from "@t3tools/shared/appIdentity";
 import * as NetService from "@t3tools/shared/Net";
 import { waitForHttpReady } from "@t3tools/shared/httpReadiness";
 import * as Digest from "effect/crypto/Digest";
@@ -303,7 +304,7 @@ export const make = Effect.fn("SshDeviceHost.make")(function* (
         preHostArgs: identityArgs(config),
         // Match the hub cwd so relative executables and PATH entries resolve identically.
         remoteCommandArgs: commandArgs(
-          `cd "$HOME/.t3/device/hosts/${owner}" && exec ${[command, ...args].map(quoteRemoteArg).join(" ")}`,
+          `cd "$HOME/${DEFAULT_T3_HOME_DIRECTORY_NAME}/device/hosts/${owner}" && exec ${[command, ...args].map(quoteRemoteArg).join(" ")}`,
         ),
         keepErrorOutputTail: true,
         ...(options?.stdin === undefined ? {} : { stdin: options.stdin }),

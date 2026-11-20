@@ -1,0 +1,213 @@
+# rstack-code: the fork's release. It publishes only what the SSH launcher, `t3 update`, and
+# scripts/install.sh read: one self-contained CLI archive per platform and SHA256SUMS, under tag
+# v<version>. GitHub-hosted runners and GITHUB_TOKEN only, so it needs no upstream secrets.
+# See docs/operations/rstack-fork.md.
+name: rstack release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the leading v. Empty uses apps/server/package.json.
+        required: false
+        default: ""
+        type: string
+      prerelease:
+        description: Mark the release as a prerelease, which is never "latest".
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rstack-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: apps/server/package.json
+          sparse-checkout-cone-mode: false
+
+      - id: version
+        name: Resolve and check version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION#v}"
+          if [[ -z "$version" ]]; then
+            version="$(jq -r .version apps/server/package.json)"
+          fi
+          # The SSH launcher only accepts one exact SemVer as a runtime directory name.
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::'$version' is not an exact SemVer version."
+            exit 1
+          fi
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Release v$version already exists. Delete it or pick another version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  cli_archive:
+    name: CLI archive ${{ matrix.resource_key }}
+    needs: preflight
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux
+            arch: x64
+            rust_target: x86_64-unknown-linux-gnu
+            resource_key: linux-x64
+          # node-pty compiles from source on Linux and linux-arm64 builds its
+          # executable natively, so arm64 builds on arm64 hardware.
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            resource_key: linux-arm64
+          - runner: macos-15
+            platform: mac
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+            resource_key: darwin-arm64
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      # Installs the pinned Vite+, Node.js (engines.node) and pnpm. Its task
+      # cache step only runs in pingdotgg/t3code with a token, so it is skipped.
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+
+      - name: Align package versions to release version
+        run: node scripts/update-release-package-versions.ts "$VERSION"
+
+      # apps/server/dist with the web client in dist/client.
+      - name: Build server and web client
+        run: vp run --filter t3 build
+
+      - name: Apply web client branding
+        shell: bash
+        run: node scripts/apply-web-brand-assets.ts production apps/server/dist/client
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.rust_target }}
+
+      - name: Build resource monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target "${{ matrix.rust_target }}"
+          dir="$RUNNER_TEMP/cli-resource-monitor/${{ matrix.resource_key }}"
+          mkdir -p "$dir"
+          cp "native/resource-monitor/target/${{ matrix.rust_target }}/release/t3-resource-monitor" "$dir/"
+
+      - name: Build CLI single-executable
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      # The Linux archive ships libatomic.so.1 and points t3's RUNPATH at it.
+      - name: Install patchelf
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: command -v patchelf || { sudo apt-get update && sudo apt-get install -y patchelf libatomic1; }
+
+      # Without T3CODE_CLI_MAC_SIGN_IDENTITY the macOS archive is signed ad hoc.
+      - name: Build CLI archive
+        shell: bash
+        run: |
+          node scripts/build-cli-archive.ts \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --version "$VERSION" \
+            --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
+            --output-dir release-cli
+
+      - name: Smoke-test CLI archive
+        shell: bash
+        run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "$VERSION"
+
+      - name: Upload CLI archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-${{ matrix.resource_key }}
+          path: release-cli/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    needs: [preflight, cli_archive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      - name: Download CLI archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: release-assets
+
+      # Installers and the SSH launcher verify archives against this file.
+      - name: Write CLI archive checksums
+        shell: bash
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          expected=("t3-$VERSION-linux-x64.tar.gz" "t3-$VERSION-linux-arm64.tar.gz" "t3-$VERSION-darwin-arm64.tar.gz")
+          for archive in "${expected[@]}"; do
+            [[ -f "$archive" ]] || { echo "::error::Missing $archive."; exit 1; }
+          done
+          sha256sum "${expected[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create release
+        shell: bash
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          flags=(--latest)
+          if [[ "$PRERELEASE" == "true" ]]; then flags=(--prerelease --latest=false); fi
+          gh release create "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes "rstack code server runtime v$VERSION, built from $GITHUB_SHA." \
+            "${flags[@]}" \
+            t3-*.tar.gz SHA256SUMS

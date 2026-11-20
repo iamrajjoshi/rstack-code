@@ -42,6 +42,10 @@ describe("resolveDesktopSshCliRunner", () => {
         archiveVersion: "0.0.22",
         releaseBaseUrl: "https://mirror.example.com/t3code",
       });
+      assert.deepStrictEqual(
+        resolveDesktopSshCliRunner(environment, { T3CODE_SSH_ARCHIVE_VERSION: " 0.1.10 " }),
+        { archiveVersion: "0.1.10" },
+      );
     }),
   );
 });

@@ -14,6 +14,7 @@ import { CliError } from "effect/cli";
 import { HttpClient } from "effect/http";
 import * as Schema from "effect/Schema";
 
+import { BOOT_SERVICE_LAUNCHD_LABEL, BOOT_SERVICE_NAME } from "@t3tools/shared/appIdentity";
 import { CLI_RELEASE_BASE_URL_ENV } from "@t3tools/shared/cliRelease";
 
 import * as ProcessRunner from "../processRunner.ts";
@@ -56,11 +57,9 @@ export {
   serviceUnitProgramOf as bootServiceProgramOf,
 } from "./serviceProtocol.ts";
 
-const BOOT_SERVICE_NAME = "t3code";
+// rstack-code: the fork's own service names, so installing it never replaces T3 Code's service.
+export { BOOT_SERVICE_LAUNCHD_LABEL };
 export const BOOT_SERVICE_UNIT_FILE = `${BOOT_SERVICE_NAME}.service`;
-// `.service` suffix keeps the label distinct from the desktop app's bundle id
-// (com.t3tools.t3code), so launchd and TCC records never collide.
-export const BOOT_SERVICE_LAUNCHD_LABEL = "com.t3tools.t3code.service";
 export const BOOT_SERVICE_PLIST_FILE = `${BOOT_SERVICE_LAUNCHD_LABEL}.plist`;
 export const BOOT_SERVICE_LOG_FILE = "boot-service.log";
 /** `schtasks /Query /HRESULT` exits with this when the task is not registered. */
@@ -306,7 +305,7 @@ const defaultSystemdUnitDir = (path: Path.Path, homeDir: string, xdgConfigHome: 
   );
 
 const scheduledTaskPath = (path: Path.Path, localAppData: string) =>
-  path.join(localAppData, "t3code", BOOT_SERVICE_TASK_FILE);
+  path.join(localAppData, BOOT_SERVICE_NAME, BOOT_SERVICE_TASK_FILE);
 
 const launchdPlistPath = (path: Path.Path, homeDir: string) =>
   path.join(homeDir, "Library", "LaunchAgents", BOOT_SERVICE_PLIST_FILE);
@@ -671,7 +670,7 @@ export function formatBootServiceProblem(
     case "service-disabled":
       return `The service is not enabled to start automatically. Run \`${commands.install}\` to repair it.`;
     case "service-stopped":
-      return `The service is not running. Check the service log (on Linux, also \`systemctl --user status t3code.service\`), then run \`${commands.install}\`.`;
+      return `The service is not running. Check the service log (on Linux, also \`systemctl --user status ${BOOT_SERVICE_UNIT_FILE}\`), then run \`${commands.install}\`.`;
     case "restart-pending":
       return `A newer version is installed but the service is still running the previous one. Run \`${commands.restart}\` to switch.`;
   }
