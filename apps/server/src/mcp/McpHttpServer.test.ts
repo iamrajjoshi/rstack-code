@@ -1679,6 +1679,11 @@ it.effect(
           Layer.provide(
             Layer.mock(BoardService.BoardService)({
               isConnected: Effect.sync(() => connected),
+              capabilities: Effect.succeed({
+                person: "raj",
+                features: ["via", "checkin-channel", "tasks-file"],
+                database: "/b/board.db",
+              }),
               run: (command) => {
                 commands.push(command);
                 return Effect.succeed({
@@ -1779,6 +1784,8 @@ it.effect(
               `t3=${workerId}`,
               "--label",
               `env=${environmentId}`,
+              "--label",
+              "title=Fix flaky search test",
             ],
             as: "fix-flaky-search-test-38fh3u",
             stdin: "Which analyzer?",

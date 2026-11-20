@@ -3,14 +3,12 @@ export interface BoardEntryState {
   readonly boardEnabled: boolean;
   /** This connection may run the board's CLI there. */
   readonly canOpen: boolean;
-  /** The board opens in a browser tab of the thread, so the environment needs the panel. */
-  readonly previewAvailable: boolean;
   readonly hasThread: boolean;
 }
 
 /** The sidebar's Board button and the command palette's Open board. */
 export function boardEntryVisible(state: BoardEntryState): boolean {
-  return state.hasThread && state.boardEnabled && state.canOpen && state.previewAvailable;
+  return state.hasThread && state.boardEnabled && state.canOpen;
 }
 
 /** A coordinator's Open on board, which shows the channels of that coordinator's workers. */
@@ -18,4 +16,19 @@ export function openOnBoardVisible(
   state: BoardEntryState & { readonly coordinator: boolean },
 ): boolean {
   return state.coordinator && boardEntryVisible(state);
+}
+
+/**
+ * Where the board's page opens: the thread's browser panel when the environment has one; else a
+ * new tab of this browser when it reaches the server's localhost, as a web client served on the
+ * same machine does; else only its address, which this browser cannot load.
+ */
+export type BoardOpenTarget = "panel" | "tab" | "address";
+
+export function boardOpenTarget(input: {
+  readonly previewAvailable: boolean;
+  readonly reachesServerLoopback: boolean;
+}): BoardOpenTarget {
+  if (input.previewAvailable) return "panel";
+  return input.reachesServerLoopback ? "tab" : "address";
 }

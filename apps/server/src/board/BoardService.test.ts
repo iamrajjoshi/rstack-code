@@ -20,8 +20,12 @@ try { stdin = fs.readFileSync(0, "utf8"); } catch {}
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, stdin, thread: process.env.T3CODE_THREAD_ID ?? null }) + "\\n");
 const rest = args.filter((arg, index) => arg !== "--json" && args[index - 1] !== "--as" && arg !== "--as");
 if (rest[0] === "status") {
-  console.log(JSON.stringify({ running: true, url: "http://localhost:4477", pid: 1, stateDir: "/b", database: "/b/board.db", version: "0.1.0", person: "raj" }));
+  console.log(JSON.stringify({ running: true, url: "http://localhost:4477", pid: 1, stateDir: "/b", database: "/b/board.db", version: "0.1.0", person: "raj", ...(process.env.FAKE_BOARD_OLD ? {} : { features: ["via", "tail-after"] }) }));
   process.exit(0);
+}
+if (rest[0] === "tail" && rest.includes("--unknown")) {
+  console.error(JSON.stringify({ reason: "usage", message: "error: unknown option '--unknown'" }));
+  process.exit(1);
 }
 if (rest[0] === "tail") {
   const base = { threadId: "msg_1", channel: "prs", actor: "raj", at: "t" };
@@ -37,13 +41,20 @@ if (rest[0] === "reply") {
   console.log(JSON.stringify({ id: "msg_2", threadId: rest[1], channel: "prs", author: "a", text: stdin, createdAt: "t", extra: true }));
   process.exit(0);
 }
+if (rest[0] === "open") {
+  console.error("node:internal/modules/esm/resolve:873\\n  throw new ERR_MODULE_NOT_FOUND(name);\\n        ^\\n\\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander'\\n    at somewhere");
+  process.exit(1);
+}
 console.error("TypeError: something broke\\n    at somewhere");
 process.exit(1);
 `;
 
 const Reply = Schema.Struct({ id: Schema.String, threadId: Schema.String, text: Schema.String });
 
-const setup = Effect.fn("BoardServiceTest.setup")(function* (place: "path" | "home" | "none") {
+const setup = Effect.fn("BoardServiceTest.setup")(function* (
+  place: "path" | "home" | "none",
+  env: Record<string, string> = {},
+) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-board-" });
   const log = `${root}/calls.log`;
@@ -73,7 +84,7 @@ const setup = Effect.fn("BoardServiceTest.setup")(function* (place: "path" | "ho
   );
   const withHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
-      Effect.provideService(HostProcess.Environment, { PATH: `${root}/bin` }),
+      Effect.provideService(HostProcess.Environment, { PATH: `${root}/bin`, ...env }),
       Effect.provideService(HostProcess.HomeDirectory, `${root}/home`),
     );
   return { calls, withHost };
@@ -100,6 +111,8 @@ describe("BoardService", () => {
         databasePath: null,
         webUrl: null,
         error: "rstack-board is not installed on this machine.",
+        replies: "update_needed",
+        autoStatus: true,
       });
       assert.isFalse(yield* withHost(board.isConnected));
     }).pipe(Effect.scoped, Effect.provide(layer(true))),
@@ -117,9 +130,24 @@ describe("BoardService", () => {
         databasePath: "/b/board.db",
         webUrl: "http://localhost:4477",
         error: null,
+        replies: "on",
+        autoStatus: true,
       });
       assert.match(status.cliPath ?? "", /home\/\.local\/bin\/rstack-board$/u);
       assert.isTrue(yield* withHost(board.isConnected));
+    }).pipe(Effect.scoped, Effect.provide(layer(true))),
+  );
+
+  it.live("reports that reply delivery needs a board without `via`", () =>
+    Effect.gen(function* () {
+      const { withHost } = yield* setup("path", { FAKE_BOARD_OLD: "1" });
+      const board = yield* BoardService.BoardService;
+      assert.include(yield* withHost(board.status), { error: null, replies: "update_needed" });
+      assert.deepEqual(yield* withHost(board.capabilities), {
+        person: "raj",
+        features: [],
+        database: "/b/board.db",
+      });
     }).pipe(Effect.scoped, Effect.provide(layer(true))),
   );
 
@@ -127,11 +155,17 @@ describe("BoardService", () => {
     Effect.gen(function* () {
       const { calls, withHost } = yield* setup("path");
       const board = yield* BoardService.BoardService;
-      assert.strictEqual(yield* withHost(board.person), "raj");
+      assert.deepEqual((yield* withHost(board.capabilities)).features, ["via", "tail-after"]);
       const exit = yield* withHost(
         board.tail(["--by", "raj"]).pipe(Stream.runCollect, Effect.flip),
       );
       assert.include(exit, { _tag: "BoardCommandError", command: "tail", reason: "exited" });
+      // The board's own reason on stderr, here a flag this CLI does not know.
+      const refused = yield* withHost(
+        board.tail(["--unknown"]).pipe(Stream.runCollect, Effect.flip),
+      );
+      assert.include(refused, { _tag: "BoardCommandError", command: "tail", reason: "usage" });
+      assert.isTrue(BoardService.isPermanentBoardError(refused));
       const seen: Array<BoardService.BoardEvent> = [];
       yield* withHost(
         board.tail([]).pipe(
@@ -148,6 +182,7 @@ describe("BoardService", () => {
         [
           ["--json", "status"],
           ["--json", "tail", "--by", "raj"],
+          ["--json", "tail", "--unknown"],
           ["--json", "tail"],
         ],
       );
@@ -215,6 +250,14 @@ describe("BoardService", () => {
         reason: "crashed",
         detail: "TypeError: something broke",
       });
+      // A broken install fails before the board runs; the error line, not the trace, is the reason.
+      const broken = yield* withHost(board.run({ args: ["open", "--no-open"] }, Reply)).pipe(
+        Effect.flip,
+      );
+      assert.strictEqual(
+        broken.message,
+        "rstack-board open failed: crashed. Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander'",
+      );
     }).pipe(Effect.scoped, Effect.provide(layer(true))),
   );
 });

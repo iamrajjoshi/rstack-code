@@ -55,7 +55,9 @@ export function BoardSettings() {
     void testConnection();
   });
   const checkKey =
-    canCheck && settings.boardEnabled ? `${environmentId}:${settings.boardCliPath}` : null;
+    canCheck && settings.boardEnabled
+      ? `${environmentId}:${settings.boardCliPath}:${settings.boardDeliverReplies}:${settings.boardAutoStatus}`
+      : null;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- asks the server to run the board CLI when the board's settings change
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- The status arrives from the server.
@@ -63,25 +65,50 @@ export function BoardSettings() {
   }, [checkKey]);
 
   const status = check !== null && "status" in check ? check.status : null;
-  const statusText = checking
-    ? gt("Checking the board…")
+  const connectedLines = (connected: BoardStatus) => {
+    const replies =
+      connected.replies === "on"
+        ? gt("replies: on")
+        : connected.replies === "off"
+          ? gt("replies: off")
+          : connected.replies === "update_needed"
+            ? gt("replies: board update needed")
+            : null;
+    const autoStatus =
+      connected.autoStatus === undefined
+        ? null
+        : connected.autoStatus
+          ? gt("auto status: on")
+          : gt("auto status: off");
+    return [
+      [
+        gt("Connected to rstack-board {version}", { version: connected.version ?? "" }),
+        replies,
+        autoStatus,
+      ]
+        .filter((part) => part !== null)
+        .join(" · "),
+      ...(connected.replies === "update_needed"
+        ? [
+            gt(
+              "Your board replies are not sent to threads until rstack-board on the server is updated.",
+            ),
+          ]
+        : []),
+      connected.webUrl !== null
+        ? gt("Board page: {url} on the server.", { url: connected.webUrl })
+        : gt("Run rstack-board on the server to open its page."),
+    ];
+  };
+  const statusLines = checking
+    ? [gt("Checking the board…")]
     : check === null
       ? undefined
       : status === null
-        ? gt("This server cannot report the board's status.")
+        ? [gt("This server cannot report the board's status.")]
         : status.error !== null
-          ? status.error
-          : status.webUrl !== null
-            ? gt("Connected to rstack-board {version}. Board page: {url} on the server.", {
-                version: status.version ?? "",
-                url: status.webUrl,
-              })
-            : gt(
-                "Connected to rstack-board {version}. Run rstack-board on the server to open its page.",
-                {
-                  version: status.version ?? "",
-                },
-              );
+          ? [status.error]
+          : connectedLines(status);
 
   return (
     <SettingsSection id="board" title={gt("Board")}>
@@ -94,9 +121,11 @@ export function BoardSettings() {
           "Give agents in every thread tools to post status and questions to rstack-board, a local message board, on the server's machine.",
         )}
         status={
-          statusText === undefined ? undefined : (
+          statusLines === undefined ? undefined : (
             <span className="grid gap-1.5">
-              <span>{statusText}</span>
+              {statusLines.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
               {status !== null && !status.installed ? (
                 <code className="block overflow-x-auto rounded-md bg-muted px-2 py-1 font-mono text-xs whitespace-pre">
                   {BOARD_INSTALL_COMMAND}

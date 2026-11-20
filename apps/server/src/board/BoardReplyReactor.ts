@@ -1,12 +1,17 @@
 import { CommandId, MessageId, ThreadId } from "@t3tools/contracts";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
+import { ServerConfig } from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import { forkParked } from "../serverActivation.ts";
@@ -26,10 +31,15 @@ export interface BoardDelivery {
   readonly text: string;
 }
 
+/** The last board event this environment handled, in the board database it came from. */
+const SavedCursor = Schema.Struct({ database: Schema.String, cursor: Schema.Number });
+const decodeSavedCursor = Schema.decodeEffect(Schema.fromJsonString(SavedCursor));
+
 /**
- * What a board event says to the rstack-code thread its board thread is labelled with. Only the
- * person's own writes pass: agents' board text is data, and forwarding it would let one agent
- * write into another's conversation. `labels` are the board thread's labels after the event.
+ * What a board event says to the rstack-code thread its board thread is labelled with. Only what
+ * the person wrote on the board's own page passes (`via: "web"`): agents' board text is data, and
+ * forwarding it, even posted with `--as <person>`, would let one agent write into another's
+ * conversation. `labels` are the board thread's labels after the event.
  */
 export const boardDelivery = (
   event: BoardService.BoardEvent,
@@ -42,6 +52,7 @@ export const boardDelivery = (
   const threadId = context.labels.t3;
   if (
     event.actor !== context.person ||
+    event.via !== "web" ||
     threadId === undefined ||
     threadId === "" ||
     context.labels.env !== context.environmentId
@@ -49,7 +60,13 @@ export const boardDelivery = (
     return null;
   }
   if (event.type === "message.posted") {
-    if (event.message.author !== context.person || event.message.id === event.threadId) return null;
+    if (
+      event.message.author !== context.person ||
+      event.message.via !== "web" ||
+      event.message.id === event.threadId
+    ) {
+      return null;
+    }
     return {
       key: `reply:${event.message.id}`,
       threadId,
@@ -84,6 +101,27 @@ const make = Effect.gen(function* () {
   const settingsService = yield* ServerSettings.ServerSettingsService;
   const environmentId = yield* (yield* ServerEnvironment.ServerEnvironmentIdentity)
     .getEnvironmentId;
+  const fs = yield* FileSystem.FileSystem;
+  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+  const cursorPath = (yield* Path.Path).join((yield* ServerConfig).stateDir, "board-cursor.json");
+
+  const readCursor = (database: string) =>
+    fs.readFileString(cursorPath).pipe(
+      Effect.flatMap(decodeSavedCursor),
+      Effect.map((saved) => (saved.database === database ? saved.cursor : null)),
+      Effect.orElseSucceed(() => null),
+    );
+
+  const saveCursor = (database: string, cursor: number) =>
+    writeFileStringAtomically({
+      filePath: cursorPath,
+      contents: JSON.stringify({ database, cursor }),
+    }).pipe(
+      Effect.provide(platform),
+      Effect.catchCause((cause) =>
+        Effect.logWarning("saving the board cursor failed", { cursor, cause }),
+      ),
+    );
 
   const deliver = Effect.fn("BoardReplyReactor.deliver")(function* (delivery: BoardDelivery) {
     const commandId = CommandId.make(`server:board-delivery:${delivery.key}`);
@@ -110,7 +148,7 @@ const make = Effect.gen(function* () {
 
   const handle = Effect.fn("BoardReplyReactor.handle")(
     function* (event: BoardService.BoardEvent, person: string) {
-      if (event.actor !== person) return;
+      if (event.actor !== person || event.via !== "web") return;
       // A posted message carries no labels, so read the thread's; a label change carries them.
       const labels =
         event.type === "labels.changed"
@@ -134,21 +172,75 @@ const make = Effect.gen(function* () {
       ),
   );
 
-  const follow = Stream.unwrap(
-    Effect.gen(function* () {
-      const person = yield* board.person;
-      if (person === null) {
-        return yield* new BoardService.BoardCommandError({
-          command: "status",
-          reason: "no_person",
-        });
+  /**
+   * Tails the person's page writes. With `tail-after`, it starts after the last event handled,
+   * so replies written while the server was down arrive now; receipts keep each to one message.
+   */
+  const followFrom = (person: string, database: string, resumable: boolean) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        let after = resumable ? yield* readCursor(database) : null;
+        if (resumable && after === null) {
+          // Nothing handled yet in this board: start from its newest event, and remember it.
+          after = (yield* board.run(
+            { args: ["read", "-n", "1"] },
+            Schema.Struct({ cursor: Schema.Number }),
+          )).cursor;
+          yield* saveCursor(database, after);
+        }
+        // The board filters on the thread's current labels; `handle` checks them again.
+        return board
+          .tail([
+            ...(after === null ? [] : ["--after", String(after)]),
+            "--by",
+            person,
+            "--via",
+            "web",
+            "--label",
+            "t3",
+            "--label",
+            `env=${environmentId}`,
+          ])
+          .pipe(
+            Stream.mapEffect((event) =>
+              handle(event, person).pipe(
+                Effect.andThen(resumable ? saveCursor(database, event.cursor) : Effect.void),
+              ),
+            ),
+          );
+      }),
+    );
+
+  // Restarts whenever a probe finds the CLI changed, such as after it is updated.
+  const follow = board.capabilityChanges.pipe(
+    Stream.switchMap((capabilities) => {
+      if (capabilities.database === null) {
+        // The board did not answer; transient, so retry like a failed tail.
+        return Stream.fail(
+          new BoardService.BoardCommandError({ command: "status", reason: "unavailable" }),
+        );
       }
-      // The board filters on the thread's current labels; `handle` checks them again.
-      return board
-        .tail(["--by", person, "--label", "t3", "--label", `env=${environmentId}`])
-        .pipe(Stream.mapEffect((event) => handle(event, person)));
+      if (capabilities.person === null || !BoardService.canDeliverReplies(capabilities)) {
+        return Stream.fromEffectDrain(
+          Effect.logWarning(
+            "board replies are not delivered: update rstack-board, which cannot yet tell the person's page writes apart",
+          ),
+        );
+      }
+      return followFrom(
+        capabilities.person,
+        capabilities.database,
+        capabilities.features.includes("tail-after"),
+      ).pipe(
+        Stream.catchIf(BoardService.isPermanentBoardError, (error) =>
+          Stream.fromEffectDrain(
+            Effect.logWarning("board replies stopped: the board CLI refused the request", {
+              error,
+            }),
+          ),
+        ),
+      );
     }),
-  ).pipe(
     Stream.tapCause((cause) => Effect.logInfo("following the board stopped; retrying", { cause })),
     Stream.retry(backoff),
   );

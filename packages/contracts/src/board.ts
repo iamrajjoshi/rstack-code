@@ -20,6 +20,13 @@ export const BoardStatus = Schema.Struct({
   webUrl: Schema.NullOr(Schema.String),
   /** Why the board is not usable, when it is not. */
   error: Schema.NullOr(Schema.String),
+  /**
+   * Whether the person's board replies reach threads: `update_needed` while the CLI predates the
+   * features delivery relies on. Optional for servers that do not report it.
+   */
+  replies: Schema.optionalKey(Schema.Literals(["on", "off", "update_needed"])),
+  /** Settings → Board → Automatic board status, as the server reads it. */
+  autoStatus: Schema.optionalKey(Schema.Boolean),
 });
 export type BoardStatus = typeof BoardStatus.Type;
 

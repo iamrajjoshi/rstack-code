@@ -17,6 +17,7 @@ const MAX_REPLIES = 20;
 const MAX_ROOT_CHARS = 4_000;
 const MAX_REPLY_CHARS = 1_500;
 const MAX_PREVIEW_CHARS = 280;
+const MAX_TITLE_LABEL_CHARS = 80;
 
 // The board validates channels, ids and labels itself; every positional follows `--`.
 export const BoardChannel = Schema.String.check(Schema.isMaxLength(120));
@@ -140,6 +141,10 @@ const threadView = (thread: BoardService.BoardThread) => {
 
 const labelArgs = (labels: Readonly<Record<string, string>>) =>
   Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]);
+
+/** The thread's title as one bounded line, so the board shows a readable name next to the handle. */
+const titleLabel = (title: string) =>
+  cut(title.replace(/\s+/gu, " ").trim(), MAX_TITLE_LABEL_CHARS);
 
 /** Acts on the board as an rstack-code thread: identity, channel and trace labels come from it. */
 export class BoardBridge extends Context.Service<
@@ -270,20 +275,35 @@ const make = Effect.gen(function* () {
         handleOf,
       }),
       worker: ancestors.some((ancestor) => ancestor.coordinator === true),
+      // Read on every post, so a retitled thread shows its new title from its next post on.
+      title: titleLabel(thread.title),
     };
   });
+  type Resolved = Effect.Success<ReturnType<typeof resolve>>;
 
   const identity = Effect.fn("BoardBridge.identity")(function* (caller: BoardCaller) {
     return (yield* resolve(caller)).identity;
   });
 
-  const traceLabels = (who: BoardIdentity) => ({ t3: who.labels.t3, env: who.labels.env });
+  const traceLabels = ({ identity: who, title }: Resolved) => ({
+    t3: who.labels.t3,
+    env: who.labels.env,
+    ...(title === "" ? {} : { title }),
+  });
 
   const postCheckin = Effect.fn("BoardBridge.postCheckin")(function* (
     caller: BoardCaller,
-    who: BoardIdentity,
+    resolved: Resolved,
     input: BoardCheckinInput,
   ) {
+    const who = resolved.identity;
+    const { features } = yield* board.capabilities;
+    // A thread outside a coordinator tree checks in where its board threads go; older CLIs
+    // file it in `threads`.
+    const channel =
+      who.coordinator === undefined && !resolved.worker && features.includes("checkin-channel")
+        ? ["--channel", who.channel]
+        : [];
     const thread = yield* board.run(
       {
         args: [
@@ -293,13 +313,14 @@ const make = Effect.gen(function* () {
           "--state",
           checkinState(input),
           ...(who.coordinator === undefined ? [] : ["--coordinator", who.coordinator]),
+          ...channel,
           ...(input.status === "needs_input" ? ["--needs", input.needs ?? "answer"] : []),
           ...(input.status === "needs_input" ? [] : ["--unset", "needs"]),
           ...(input.pr === undefined ? [] : ["--pr", String(input.pr)]),
           ...labelArgs({
             ...(input.branch === undefined ? {} : { branch: input.branch }),
             ...(input.worktree === undefined ? {} : { worktree: input.worktree }),
-            ...traceLabels(who),
+            ...traceLabels(resolved),
           }),
         ],
         as: who.handle,
@@ -315,14 +336,15 @@ const make = Effect.gen(function* () {
     caller: BoardCaller,
     input: BoardCheckinInput,
   ) {
-    return yield* postCheckin(caller, yield* identity(caller), input);
+    return yield* postCheckin(caller, yield* resolve(caller), input);
   });
 
   const autoCheckin = Effect.fn("BoardBridge.autoCheckin")(function* (
     caller: BoardCaller,
     input: BoardCheckinInput,
   ) {
-    const { identity: who, worker } = yield* resolve(caller);
+    const resolved = yield* resolve(caller);
+    const { identity: who, worker } = resolved;
     if (!worker) return "not_a_worker" as const;
     // The board keeps one check-in thread per worker, labelled with its thread id.
     const { threads: found } = yield* board.run(
@@ -345,7 +367,7 @@ const make = Effect.gen(function* () {
     if (current?.state === checkinState(input) && current.needs === needs) {
       return "unchanged" as const;
     }
-    yield* postCheckin(caller, who, input);
+    yield* postCheckin(caller, resolved, input);
     return "posted" as const;
   });
 
@@ -353,7 +375,8 @@ const make = Effect.gen(function* () {
     caller: BoardCaller,
     input: Parameters<BoardBridge["Service"]["post"]>[1],
   ) {
-    const who = yield* identity(caller);
+    const resolved = yield* resolve(caller);
+    const who = resolved.identity;
     const channel = input.channel ?? who.channel;
     const message = yield* board.run(
       {
@@ -364,7 +387,7 @@ const make = Effect.gen(function* () {
           ...labelArgs({
             ...input.labels,
             ...(input.needs === undefined ? {} : { needs: input.needs }),
-            ...traceLabels(who),
+            ...traceLabels(resolved),
           }),
           "--",
           channel,
@@ -474,16 +497,21 @@ const make = Effect.gen(function* () {
     const who = yield* identity(caller);
     const verb =
       input.outcome === "failed" ? "fail" : input.outcome === "released" ? "release" : "complete";
+    // Older CLIs take the result only as a positional after the id.
+    const fromStdin =
+      input.result !== undefined && (yield* board.capabilities).features.includes("tasks-file");
     const thread = yield* board.run(
       {
         args: [
           "tasks",
           verb,
+          ...(fromStdin ? ["--file", "-"] : []),
           "--",
           input.id,
-          ...(input.result === undefined ? [] : [input.result]),
+          ...(input.result === undefined || fromStdin ? [] : [input.result]),
         ],
         as: who.handle,
+        ...(fromStdin ? { stdin: input.result } : {}),
         threadId: caller.threadId,
       },
       BoardService.BoardThreadSummary,

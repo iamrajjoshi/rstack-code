@@ -9,9 +9,9 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -60,6 +60,10 @@ export class BoardCommandError extends Schema.TaggedError<BoardCommandError>()(
   }
 }
 
+/** A failure that retrying the same command cannot fix: the CLI does not take these arguments. */
+export const isPermanentBoardError = (error: BoardError) =>
+  error._tag === "BoardCommandError" && error.reason === "usage";
+
 export type BoardError =
   | BoardNotConnectedError
   | BoardNotInstalledError
@@ -68,6 +72,9 @@ export type BoardError =
 
 const Labels = Schema.Record(Schema.String, Schema.String);
 
+/** `web` for the person's writes on the board's own page, `cli` for every CLI write. Older CLIs omit it. */
+const Via = Schema.optional(Schema.Literals(["web", "cli"]));
+
 export const BoardMessage = Schema.Struct({
   id: Schema.String,
   threadId: Schema.String,
@@ -75,6 +82,7 @@ export const BoardMessage = Schema.Struct({
   author: Schema.String,
   text: Schema.String,
   createdAt: Schema.String,
+  via: Via,
 });
 export type BoardMessage = typeof BoardMessage.Type;
 
@@ -106,6 +114,7 @@ const BoardEventFields = {
   /** Who made the change: an agent's handle, or the person's for writes from the board's page. */
   actor: Schema.String,
   at: Schema.String,
+  via: Via,
 };
 export const BoardEvent = Schema.Union([
   Schema.Struct({
@@ -131,12 +140,29 @@ const CliStatus = Schema.Struct({
   database: Schema.String,
   version: Schema.optional(Schema.String),
   person: Schema.optional(Schema.String),
+  /** Bridge features such as `via` and `tail-after`; older CLIs omit the field. */
+  features: Schema.optional(Schema.Array(Schema.String)),
 });
 const decodeCliFailure = Schema.decodeOption(
   Schema.fromJsonString(
     Schema.Struct({ reason: Schema.String, message: Schema.optional(Schema.String) }),
   ),
 );
+
+/** What the connected CLI can do, from its last `status`. Empty while the board is not usable. */
+export interface BoardCapabilities {
+  /** The handle the board records writes from its page under. */
+  readonly person: string | null;
+  readonly features: ReadonlyArray<string>;
+  /** The board's database, which its event cursors belong to. */
+  readonly database: string | null;
+}
+
+const noCapabilities: BoardCapabilities = { person: null, features: [], database: null };
+
+/** Reply delivery needs to tell the person's writes on the board's page apart from CLI writes. */
+export const canDeliverReplies = (capabilities: BoardCapabilities) =>
+  capabilities.person !== null && capabilities.features.includes("via");
 
 export interface BoardCommand {
   /** CLI arguments after the global flags, such as `["reply", id, "--file", "-"]`. */
@@ -155,12 +181,14 @@ export class BoardService extends Context.Service<
     readonly status: Effect.Effect<BoardStatus>;
     /** Turned on in settings and the CLI answered within the last minute. */
     readonly isConnected: Effect.Effect<boolean>;
+    /** The connected CLI's capabilities, probed at most once a minute. Never fails. */
+    readonly capabilities: Effect.Effect<BoardCapabilities>;
     /**
-     * Runs `status` now: the handle the board records writes from its page under, or null while
-     * the board is not usable or its CLI is too old to say.
+     * The capabilities now, probing when the last answer is stale, then again whenever a later
+     * probe (Settings, a turn, a tool listing) finds them changed, such as after a CLI update.
      */
-    readonly person: Effect.Effect<string | null>;
-    /** `tail --json` with these arguments: new events from now until the scope closes. */
+    readonly capabilityChanges: Stream.Stream<BoardCapabilities>;
+    /** `tail --json` with these arguments, until the scope closes. */
     readonly tail: (args: ReadonlyArray<string>) => Stream.Stream<BoardEvent, BoardError>;
     /** Runs one command with `--json` and decodes its output; extra fields are ignored. */
     readonly run: <A>(
@@ -181,12 +209,12 @@ const make = Effect.gen(function* () {
   const processRunner = yield* ProcessRunner.ProcessRunner;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-  const probed = yield* Ref.make<
+  const probed = yield* SubscriptionRef.make<
     | {
         readonly cliSetting: string;
         readonly at: number;
         readonly status: BoardStatus;
-        readonly person: string | null;
+        readonly capabilities: BoardCapabilities;
       }
     | undefined
   >(undefined);
@@ -249,12 +277,14 @@ const make = Effect.gen(function* () {
         ...(failure.value.message === undefined ? {} : { detail: cap(failure.value.message) }),
       });
     }
-    // Not a board error: Node itself failed, such as a version without node:sqlite.
-    const firstLine = output.stderr.trim().split("\n")[0] ?? "";
+    // Not a board error: Node itself failed, such as a version without node:sqlite or a missing
+    // module, whose stack trace starts with a source location; the error line says why.
+    const lines = output.stderr.trim().split("\n");
+    const why = lines.find((line) => /^[A-Za-z]*Error\b/u.test(line)) ?? lines[0] ?? "";
     return yield* new BoardCommandError({
       command: label,
       reason: "crashed",
-      ...(firstLine === "" ? {} : { detail: cap(firstLine) }),
+      ...(why === "" ? {} : { detail: cap(why) }),
     });
   });
 
@@ -279,7 +309,11 @@ const make = Effect.gen(function* () {
           webUrl: status.running ? status.url : null,
           error: null,
         } satisfies BoardStatus,
-        person: status.person?.trim() || null,
+        capabilities: {
+          person: status.person?.trim() || null,
+          features: status.features ?? [],
+          database: status.database,
+        } satisfies BoardCapabilities,
       };
     });
     return yield* attempt.pipe(
@@ -294,7 +328,7 @@ const make = Effect.gen(function* () {
             webUrl: null,
             error: error.message,
           } satisfies BoardStatus,
-          person: null,
+          capabilities: noCapabilities,
         }),
       ),
     );
@@ -306,13 +340,31 @@ const make = Effect.gen(function* () {
   ) {
     const result = yield* probe(enabled, cliSetting);
     const at = yield* Clock.currentTimeMillis;
-    yield* Ref.set(probed, { cliSetting, at, ...result });
+    yield* SubscriptionRef.set(probed, { cliSetting, at, ...result });
     return result;
+  });
+
+  /** The last probe while it is fresh and for the current CLI setting, else a new one. */
+  const current = Effect.fn("BoardService.current")(function* (cliSetting: string) {
+    const now = yield* Clock.currentTimeMillis;
+    const last = yield* SubscriptionRef.get(probed);
+    return last !== undefined && last.cliSetting === cliSetting && now - last.at < PROBE_TTL_MS
+      ? last
+      : yield* refresh(true, cliSetting);
   });
 
   const status = Effect.gen(function* () {
     const settings = yield* settingsService.getSettings;
-    return (yield* refresh(settings.boardEnabled, settings.boardCliPath)).status;
+    const result = yield* refresh(settings.boardEnabled, settings.boardCliPath);
+    return {
+      ...result.status,
+      replies: !settings.boardDeliverReplies
+        ? "off"
+        : canDeliverReplies(result.capabilities)
+          ? "on"
+          : "update_needed",
+      autoStatus: settings.boardAutoStatus,
+    } satisfies BoardStatus;
   }).pipe(
     Effect.catchTags({
       ServerSettingsError: (error) =>
@@ -332,15 +384,7 @@ const make = Effect.gen(function* () {
   const isConnected = Effect.gen(function* () {
     const settings = yield* settingsService.getSettings;
     if (!settings.boardEnabled) return false;
-    const now = yield* Clock.currentTimeMillis;
-    const last = yield* Ref.get(probed);
-    const current =
-      last !== undefined &&
-      last.cliSetting === settings.boardCliPath &&
-      now - last.at < PROBE_TTL_MS
-        ? last.status
-        : (yield* refresh(true, settings.boardCliPath)).status;
-    return current.error === null;
+    return (yield* current(settings.boardCliPath)).status.error === null;
   }).pipe(
     Effect.orElseSucceed(() => false),
     Effect.withSpan("BoardService.isConnected"),
@@ -357,14 +401,28 @@ const make = Effect.gen(function* () {
     return yield* decode(commandLabel(command.args), stdout, success);
   });
 
-  const person = Effect.gen(function* () {
+  const capabilities = Effect.gen(function* () {
     const settings = yield* settingsService.getSettings;
-    if (!settings.boardEnabled) return null;
-    return (yield* refresh(true, settings.boardCliPath)).person;
+    if (!settings.boardEnabled) return noCapabilities;
+    return (yield* current(settings.boardCliPath)).capabilities;
   }).pipe(
-    Effect.orElseSucceed(() => null),
-    Effect.withSpan("BoardService.person"),
+    Effect.orElseSucceed(() => noCapabilities),
+    Effect.withSpan("BoardService.capabilities"),
   );
+
+  const capabilityKey = (value: BoardCapabilities) =>
+    JSON.stringify([value.person, value.features, value.database]);
+  const capabilityChanges = Stream.unwrap(
+    capabilities.pipe(
+      Effect.as(
+        SubscriptionRef.changes(probed).pipe(
+          Stream.map((last) =>
+            last === undefined || !last.status.enabled ? noCapabilities : last.capabilities,
+          ),
+        ),
+      ),
+    ),
+  ).pipe(Stream.changesWith((left, right) => capabilityKey(left) === capabilityKey(right)));
 
   const tail = (args: ReadonlyArray<string>) =>
     Stream.unwrap(
@@ -384,7 +442,7 @@ const make = Effect.gen(function* () {
               extendEnv: true,
               shell: command.shell,
               stdin: "ignore",
-              stderr: "ignore",
+              stderr: "pipe",
               forceKillAfter: "1 second",
             }),
           )
@@ -403,7 +461,30 @@ const make = Effect.gen(function* () {
           Stream.mapError(
             (cause) => new BoardCommandError({ command: "tail", reason: "crashed", cause }),
           ),
-          Stream.concat(Stream.fail(new BoardCommandError({ command: "tail", reason: "exited" }))),
+          // On exit the board writes its reason to stderr, such as `usage` for an unknown option.
+          Stream.concat(
+            Stream.unwrap(
+              child.stderr.pipe(
+                Stream.decodeText(),
+                Stream.mkString,
+                Effect.orElseSucceed(() => ""),
+                Effect.map((stderr) => {
+                  const failure = decodeCliFailure(stderr.trim());
+                  return Stream.fail(
+                    failure._tag === "Some" && /^[a-z_]{1,40}$/u.test(failure.value.reason)
+                      ? new BoardCommandError({
+                          command: "tail",
+                          reason: failure.value.reason,
+                          ...(failure.value.message === undefined
+                            ? {}
+                            : { detail: cap(failure.value.message) }),
+                        })
+                      : new BoardCommandError({ command: "tail", reason: "exited" }),
+                  );
+                }),
+              ),
+            ),
+          ),
         );
       }),
     ).pipe(Stream.withSpan("BoardService.tail"));
@@ -411,7 +492,8 @@ const make = Effect.gen(function* () {
   return BoardService.of({
     status,
     isConnected,
-    person,
+    capabilities,
+    capabilityChanges,
     tail,
     run,
   });

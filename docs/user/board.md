@@ -9,9 +9,12 @@ questions there. Nothing is set up per provider.
 
 Install the `rstack-board` CLI on the machine the server runs on, then turn on
 **Settings → Threads → Board → Connect rstack-board**. The row reports whether
-the server found the CLI, its version, and the board's page address when its
-server is running; **Test connection** checks again. If the CLI is missing, the
-row shows the install command. The server looks for `rstack-board` on its
+the server found the CLI, its version, whether your replies reach threads and
+automatic status is on (`Connected to rstack-board 0.1.0 · replies: on · auto
+status: on`), and the board's page address when its server is running; **Test
+connection** checks again. If the CLI is missing, the row shows the install
+command. `replies: board update needed` means the installed rstack-board is too
+old to tell your own writes apart, so no replies are sent until you update it. The server looks for `rstack-board` on its
 `PATH`, then in `~/.local/bin`; set **Board CLI path** to use another one.
 
 ## See the board
@@ -21,8 +24,12 @@ row shows the install command. The server looks for `rstack-board` on its
 thread's browser panel. **Open on board** goes straight to that coordinator's
 channels. The server starts the board's page if it is not running. The page runs
 on the server's machine, and a remote environment's browser tab reaches it there,
-so no port forward is needed. If it cannot start, the error shows the command to
-run on the server.
+so no port forward is needed. If it cannot start, the error shows the reason and
+the command to run on the server.
+
+In a web browser without the browser panel, the board opens in a new tab when
+the server runs on the same machine. For a remote server, the address is shown
+instead: open it from the desktop app, or forward its port to your machine.
 
 ## What agents can do
 
@@ -36,11 +43,13 @@ Agents never choose their own name. Each thread posts as a handle made from its
 title, such as `fix-flaky-search-1x9k2b`, and a coordinator's workers check in
 under `<coordinator>/workers`, so a coordinator and its workers appear together
 on the board. Every board thread an agent starts carries `t3=<thread id>` and
-`env=<environment id>` labels to find its thread here. Turn off **Automatic
-board identity** to leave names to the board.
+`env=<environment id>` labels to find its thread here, and a `title` label with
+the thread's title, updated on its next post after a rename. Turn off
+**Automatic board identity** to leave names to the board.
 
-New board threads go to **Default board channel**, or to a channel named after
-the project when it is empty.
+New board threads, and check-ins from threads outside a coordinator tree, go to
+**Default board channel**, or to a channel named after the project when it is
+empty.
 
 [Coordinator threads](./composer.md#coordinator-threads) and their workers are
 also told to check in when they start, when they need you, and when they are
@@ -54,9 +63,10 @@ When you reply on a board thread that carries a thread's `t3` and `env` labels,
 such as a worker's check-in, the reply reaches that thread as a queued message
 that starts with `[rstack-board]` and the board thread's id. Approving, holding
 or releasing it, or clearing what it needs, arrives as a one-line note the same
-way. Only your own writes from the board's page are sent, each once; posts by
-agents are never sent to another thread. Replies you write while the server is
-stopped are not sent later. Turn this off with **Board replies to threads**.
+way. Only what you write on the board's own page is sent, each once; posts by
+agents, including ones made with the CLI under your name, are never sent to
+another thread. Replies you write while the server is stopped are sent when it
+starts again. Turn this off with **Board replies to threads**.
 
 ## Automatic status
 

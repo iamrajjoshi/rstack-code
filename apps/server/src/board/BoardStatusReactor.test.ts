@@ -68,6 +68,7 @@ const setup = Effect.gen(function* () {
     Layer.provide(
       Layer.mock(BoardService.BoardService)({
         isConnected: Effect.succeed(true),
+        capabilities: Effect.succeed({ person: "raj", features: [], database: "/b/board.db" }),
         run: (command) =>
           Queue.offer(commands, command).pipe(
             Effect.andThen(() => {
@@ -133,6 +134,7 @@ describe("BoardStatusReactor", () => {
           const working = yield* next;
           assert.strictEqual(stateOf(working), "working");
           assert.include(working.args, "branch=fix/search");
+          assert.include(working.args, "title=Fix flaky search test");
           assert.strictEqual(working.as, "fix-flaky-search-test-38fh3u");
 
           // A second `running` reads nothing; the question that follows is the next call.

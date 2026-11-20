@@ -63,6 +63,18 @@ const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
   isElectron &&
   (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
 
+/** This browser loads the environment's localhost itself, as a client on the server's machine does. */
+export const browserReachesEnvironmentLoopback = (environmentId: EnvironmentId): boolean => {
+  const connection = readPreparedConnection(environmentId);
+  if (!connection) return false;
+  if (reachesEnvironmentLoopback(connection.target)) return true;
+  try {
+    return isLocalLoopbackHost(new URL(connection.httpBaseUrl).hostname);
+  } catch {
+    return false;
+  }
+};
+
 /** Desktop carries every other environment's loopback traffic through the preview tunnel. */
 export const tunnelsEnvironmentLoopback = (target: ConnectionTarget | undefined): boolean =>
   isElectron && !(target !== undefined && reachesEnvironmentLoopback(target));
