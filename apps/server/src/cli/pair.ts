@@ -5,6 +5,7 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   PortSchema,
 } from "@t3tools/contracts";
+import { CLI_INSTALL_SCRIPT_URL } from "@t3tools/shared/cliRelease";
 import { resolveWorktreeT3Home } from "@t3tools/shared/devHome";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { formatHostForUrl, isWildcardHost } from "@t3tools/shared/hostClassification";
@@ -559,7 +560,8 @@ export const pairCommand = Command.make("pair", {
         return yield* new IncompatibleServerProtocolError({
           serverVersion: target.descriptor.serverVersion,
           serverProtocolVersion,
-          pairCommand: `npx t3@${target.descriptor.serverVersion} pair${baseDirArgs}`,
+          // rstack-code: the npm package `t3` is upstream T3 Code; install the fork's matching CLI.
+          pairCommand: `curl -fsSL ${CLI_INSTALL_SCRIPT_URL} | T3CODE_VERSION=${target.descriptor.serverVersion} sh && t3 pair${baseDirArgs}`,
         });
       }
 

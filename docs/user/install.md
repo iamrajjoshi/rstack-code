@@ -11,13 +11,13 @@ launch T3 Code and configure providers afterwards.
 ## Command line
 
 ```bash
-curl -fsSL https://t3.codes/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/iamrajjoshi/rstack-code/main/scripts/install.sh | sh
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-irm https://t3.codes/install.ps1 | iex
+irm https://raw.githubusercontent.com/iamrajjoshi/rstack-code/main/scripts/install.ps1 | iex
 ```
 
 This installs the `t3` command to `~/.local/bin`. If that folder is not on your
@@ -47,12 +47,8 @@ command it names and open the pairing URL to connect to that server. Stop it
 before starting a replacement, or use a different `--base-dir` for an
 independent server.
 
-To try T3 Code once without installing it, run `npx t3@latest` instead (needs
-Node.js for `npx`). It offers to install the `t3` command first. If you say no,
-it asks again at the next minor release, and `npx t3 install` installs it later.
-`npx t3` always runs the version npm picked, even when a `t3` is installed. On
-the nightly train, run your installed `t3` (for example `t3 connect`), not
-`npx t3`, which runs the latest stable release.
+The npm package `t3` is T3 Code, not this fork. Do not run it with `npx`
+against this fork's data directory; install the `t3` command as above.
 
 ### Intel Macs
 

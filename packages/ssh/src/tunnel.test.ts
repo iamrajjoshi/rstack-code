@@ -1541,15 +1541,17 @@ server.listen(Number(flag("--port") ?? 0), "127.0.0.1", () => {
       assert.equal(renamedAndUpdated.remoteServerKind, "managed");
       assert.isFalse(yield* isRunning(updatedPid), "a rename with an update kept the old server");
 
-      // A server that a launch without an ID started under a reused key is not this desktop's.
+      // A launch without an ID under a reused key drops the stale ID, so no desktop owns its
+      // server and this desktop's update replaces it.
       const again = { ...target, alias: "devbox-again" };
       process.kill(yield* runtimePid, "SIGKILL");
       assert.equal((yield* launch(again, fakeServer, null)).remoteServerKind, "managed");
       const unownedPid = yield* runtimePid;
       launchedPids.push(unownedPid);
       const final = yield* launch({ ...target, alias: "devbox-final" }, updatedServer);
-      assert.equal(final.remoteServerKind, "external");
-      assert.isTrue(yield* isRunning(unownedPid), "a stale launcher ID claimed another's server");
+      launchedPids.push(yield* runtimePid);
+      assert.equal(final.remoteServerKind, "managed");
+      assert.isFalse(yield* isRunning(unownedPid), "an update kept a server no desktop owns");
     }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
@@ -1732,13 +1734,34 @@ const canBind = (port) =>
           }),
         ),
       );
-      const connect = (archiveVersion: string) =>
+      const connect = (
+        archiveVersion: string,
+        { stateKey = "test-state", launcherId }: { stateKey?: string; launcherId?: string } = {},
+      ) =>
         Effect.gen(function* () {
+          const keyDir = `${home}/.rstack/ssh-launch/${stateKey}`;
+          if (!(yield* fs.exists(keyDir))) {
+            yield* fs.makeDirectory(keyDir, { recursive: true });
+            yield* fs.writeFileString(`${keyDir}/port`, `${yield* freeLoopbackPort}\n`);
+          }
           const launch = `${root}/launch-${archiveVersion}.sh`;
           yield* fs.writeFileString(launch, SshTunnel.buildRemoteLaunchScript({ archiveVersion }));
-          const result = yield* runScript(home, [launch, "test-state"]);
+          const result = yield* runScript(home, [
+            launch,
+            stateKey,
+            ...(launcherId === undefined ? [] : [launcherId]),
+          ]);
           assert.equal(result.exitCode, 0, result.stderr);
-          const pid = yield* readManagedPid;
+          // The serving server, which an adopting launch does not record as its own.
+          const pid = Number(
+            (
+              JSON.parse(
+                yield* fs.readFileString(`${home}/.rstack/userdata/server-runtime.json`),
+              ) as {
+                pid: number;
+              }
+            ).pid,
+          );
           launchedPids.add(pid);
           return pid;
         });
@@ -1787,15 +1810,21 @@ const canBind = (port) =>
   );
 
   it.live.skipIf(windowsHost)("a newer client still replaces an older managed server", () =>
-    Effect.gen(function* () {
-      const { connect, readServerVersion } = yield* prepareLaunch(["0.1.5", "0.1.6"]);
-      const olderPid = yield* connect("0.1.5");
+    Effect.forEach(
+      // A script calling the launcher passes no launcher ID and its own target, so its key differs.
+      [{}, { stateKey: "script-state" }],
+      (older) =>
+        Effect.gen(function* () {
+          const { connect, readServerVersion } = yield* prepareLaunch(["0.1.5", "0.1.6"]);
+          const olderPid = yield* connect("0.1.5", older);
 
-      const newerPid = yield* connect("0.1.6");
-      assert.notEqual(newerPid, olderPid);
-      assert.isFalse(isAlive(olderPid));
-      assert.equal(yield* readServerVersion, "0.1.6");
-    }).pipe(Effect.provide(NodeServices.layer)),
+          const newerPid = yield* connect("0.1.6", { launcherId: "a".repeat(32) });
+          assert.notEqual(newerPid, olderPid);
+          assert.isFalse(isAlive(olderPid), `kept the server started under ${older.stateKey}`);
+          assert.equal(yield* readServerVersion, "0.1.6");
+        }),
+      { discard: true },
+    ).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 

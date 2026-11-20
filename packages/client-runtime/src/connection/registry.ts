@@ -160,6 +160,9 @@ export class EnvironmentRegistry extends Context.Service<
       | PlatformEnvironmentRemovalError
     >;
     readonly retryNow: (environmentId: EnvironmentId) => Effect.Effect<void>;
+    readonly relaunchSsh: (
+      environmentId: EnvironmentId,
+    ) => Effect.Effect<void, EnvironmentNotRegisteredError>;
     readonly setEnabled: (
       environmentId: EnvironmentId,
       enabled: boolean,
@@ -1064,6 +1067,28 @@ export const make = Effect.gen(function* () {
       Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
       Effect.withSpan("EnvironmentRegistry.retryNow"),
     );
+  // Stopping the SSH backend this desktop launched and connecting again runs the SSH launch,
+  // which starts the desktop's own server version. A server another desktop owns keeps running.
+  const relaunchSsh = Effect.fn("EnvironmentRegistry.relaunchSsh")(function* (
+    environmentId: EnvironmentId,
+  ) {
+    yield* withLeaseLock(
+      environmentId,
+      Effect.gen(function* () {
+        const entry = yield* getEntry(environmentId);
+        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+        if (lease !== undefined) yield* lease.supervisor.disconnect;
+        for (const route of connectionRoutes(entry)) {
+          const profile = Option.getOrNull(route.profile);
+          if (profile !== null && isSshConnectionProfile(profile)) {
+            yield* disconnectSsh(environmentId, profile);
+          }
+        }
+        if (lease !== undefined && entry.enabled) yield* lease.supervisor.connect;
+      }),
+    );
+  });
+
   const setEnabled = Effect.fn("EnvironmentRegistry.setEnabled")(function* (
     environmentId: EnvironmentId,
     enabled: boolean,
@@ -1206,6 +1231,7 @@ export const make = Effect.gen(function* () {
     reorderRoutes,
     removeRelayEnvironments,
     retryNow,
+    relaunchSsh,
     setEnabled,
     setCompatibility,
     state,

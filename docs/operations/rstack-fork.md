@@ -50,6 +50,9 @@ On connect, the desktop app runs a launcher on the host that downloads
 `T3CODE_RELEASE_BASE_URL`), verifies the checksum, unpacks it to
 `~/.rstack/runtime/versions/<version>` and starts or reuses a server with home `~/.rstack`. The
 host must reach github.com, or have the same version installed with `scripts/install.sh`.
+A server that a launch without a desktop's launcher ID started (a script calling
+`launchOrReuseRemoteServer`) belongs to no desktop, so the next desktop takes it over and replaces
+it when it is older; upstream leaves such a server running.
 
 `<version>` is the desktop app's own version, so that release must exist:
 

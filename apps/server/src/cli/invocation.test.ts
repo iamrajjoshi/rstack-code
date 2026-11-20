@@ -40,13 +40,14 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
 
   it.effect("keeps a user-installed Node reachable when the command runs under sudo", () =>
     Effect.gen(function* () {
+      // rstack-code: the npm package `t3` is upstream T3 Code, so no hint names a package runner.
       const npx = "/home/theo/.npm/_npx/abc/node_modules/t3/dist/bin.mjs";
       expect(yield* rootCommand({ node: "/usr/bin/node", entry: npx })).toBe(
-        "sudo npx t3 browser setup",
+        "sudo t3 browser setup",
       );
       expect(
         yield* rootCommand({ node: "/home/theo/.nvm/versions/node/v24/bin/node", entry: npx }),
-      ).toBe('sudo env "PATH=$PATH" npx t3 browser setup');
+      ).toBe('sudo env "PATH=$PATH" t3 browser setup');
       expect(
         yield* rootCommand({
           node: "/home/theo/.local/node/bin/node",

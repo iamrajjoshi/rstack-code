@@ -875,7 +875,10 @@ if adopt_default_server && [ -n "$ADOPTED_PID" ] && [ -n "$LAUNCHER_ID" ]; then
   for SIBLING_DIR in "$DEFAULT_SERVER_HOME"/ssh-launch/*; do
     [ "$SIBLING_DIR" != "$STATE_DIR" ] && [ "$(cat "$SIBLING_DIR/managed" 2>/dev/null || true)" = "managed" ] || continue
     [ "$(cat "$SIBLING_DIR/pid" 2>/dev/null || true)" = "$ADOPTED_PID" ] && managed_server_running "$ADOPTED_PID" || continue
-    [ "$(cat "$SIBLING_DIR/launcher" 2>/dev/null || true)" = "$LAUNCHER_ID" ] || break
+    # rstack-code: every fork desktop sends an ID, so a launch without one (a script) owns nothing
+    # and a desktop takes its server over; an older one would otherwise never be upgraded.
+    SIBLING_LAUNCHER="$(cat "$SIBLING_DIR/launcher" 2>/dev/null || true)"
+    [ -z "$SIBLING_LAUNCHER" ] || [ "$SIBLING_LAUNCHER" = "$LAUNCHER_ID" ] || break
     REMOTE_PID="$ADOPTED_PID"
     REMOTE_MANAGED="managed"
     printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"

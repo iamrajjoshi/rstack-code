@@ -1218,6 +1218,39 @@ describe("EnvironmentRegistry", () => {
     }),
   );
 
+  it.effect("relaunching an SSH environment replaces its backend under a new session", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness([SSH_CONNECTION], [SSH_PROFILE]);
+
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        yield* registry.start;
+        yield* awaitConnectionState(
+          registry,
+          SSH_CONNECTION.environmentId,
+          (state) => state.phase === "connected",
+        );
+
+        yield* registry.relaunchSsh(SSH_CONNECTION.environmentId);
+        yield* registry.stateChanges(SSH_CONNECTION.environmentId).pipe(
+          Stream.filterEffect((state) =>
+            Ref.get(harness.sessions).pipe(
+              Effect.map((sessions) => state.phase === "connected" && sessions.length === 2),
+            ),
+          ),
+          Stream.runHead,
+        );
+
+        expect(yield* Ref.get(harness.disconnectedSshTargets)).toEqual([SSH_TARGET]);
+        expect(yield* Ref.get(harness.releasedSessions)).toBe(1);
+        expect(yield* Ref.get(harness.sessions)).toHaveLength(2);
+        expect(
+          (yield* SubscriptionRef.get(registry.entries)).get(SSH_CONNECTION.environmentId)?.enabled,
+        ).toBe(true);
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
   it.effect("moves durable streams to a replacement supervisor", () =>
     Effect.gen(function* () {
       const replacement = new RelayConnectionTarget({

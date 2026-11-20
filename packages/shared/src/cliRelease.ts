@@ -6,6 +6,7 @@ import { compareSemverVersions } from "./semver.ts";
 // rstack-code: CLI updates and installs come from the fork's releases, never upstream's.
 const CLI_RELEASE_REPOSITORY = "iamrajjoshi/rstack-code";
 export const CLI_RELEASES_PAGE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases`;
+export const CLI_INSTALL_SCRIPT_URL = `https://raw.githubusercontent.com/${CLI_RELEASE_REPOSITORY}/main/scripts/install.sh`;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
 

@@ -105,8 +105,8 @@ The offered action depends on how the server runs:
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Update server**          | Keep the client open while it installs and reconnects. Supported background services update remotely. For a desktop-hosted server, this also closes and relaunches the desktop app on the host. |
 | **Update the desktop app** | Update the desktop app on the machine running the server, then reopen it if needed.                                                                                                             |
-| **Copy update command**    | Run the command on the named host to update the detected global npm install or installed `t3` command, then restart the server with your usual options.                                         |
-| **Copy relaunch command**  | Stop the command-line server on its host and relaunch with the copied command, keeping your usual subcommand and options. This does not update an installed `t3` command.                       |
+| **Update** (SSH)           | For a server the desktop app started over SSH, confirm the restart. The app stops that server and starts its own version on the host, then reconnects.                                          |
+| **Copy update command**    | Run the command on the named host to update its installed `t3` command, or install that version from the release archive, then restart the server with your usual options.                      |
 
 On the host, run:
 
@@ -124,9 +124,15 @@ If you decline the restart for a background service installed by an older
 release, the service can stay down after a crash or reboot until you run
 `t3 service restart`.
 
-If you run the server with `npx` rather than an installed `t3`, there is
-nothing to update on the host: stop the server and relaunch it as
-`npx t3@<client-version>` with the same subcommand and options.
+If the host has no installed `t3` command, install the client's version there
+with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/iamrajjoshi/rstack-code/main/scripts/install.sh | T3CODE_VERSION=<client-version> sh
+```
+
+A server started over SSH by another desktop app keeps running on its version
+until that app updates it.
 
 ## If an update fails
 

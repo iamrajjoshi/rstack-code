@@ -21,12 +21,14 @@ const MISMATCH_HINT =
 
 describe("versionSkew", () => {
   it("updates only the proven install and safely quotes its paths", () => {
+    // rstack-code: the npm package `t3` is upstream T3 Code, so the rest reinstall from the fork.
+    const install =
+      "curl -fsSL https://raw.githubusercontent.com/iamrajjoshi/rstack-code/main/scripts/install.sh | T3CODE_VERSION=0.0.45 sh";
     expect(manualServerUpdateCommand("0.0.45", { kind: "npm-global", prefix: "/opt/node" })).toBe(
-      "npm install --global --prefix '/opt/node' t3@0.0.45",
+      install,
     );
-    expect(
-      manualServerUpdateCommand("0.0.45", { kind: "npm-global", prefix: "/opt/maria's node" }),
-    ).toBe("npm install --global --prefix '/opt/maria'\\''s node' t3@0.0.45");
+    expect(manualServerUpdateCommand("0.0.45", { kind: "npx" })).toBe(install);
+    expect(manualServerUpdateCommand("0.0.45")).toBe(install);
     expect(
       manualServerUpdateCommand("0.0.45", {
         kind: "t3-launcher",

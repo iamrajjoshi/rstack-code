@@ -191,6 +191,15 @@ export function createEnvironmentCatalogAtoms<R, E>(
         Effect.flatMap((registry) => registry.retryNow(environmentId)),
       ),
   });
+  const relaunchSsh = createRuntimeCommand(runtime, {
+    label: "environment-catalog:relaunch-ssh",
+    scheduler: commandScheduler,
+    concurrency: serial,
+    execute: (environmentId: EnvironmentIdType) =>
+      EnvironmentRegistry.EnvironmentRegistry.pipe(
+        Effect.flatMap((registry) => registry.relaunchSsh(environmentId)),
+      ),
+  });
 
   return {
     catalogAtom,
@@ -207,6 +216,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     reorderRoutes,
     removeRelayEnvironments,
     retryNow,
+    relaunchSsh,
     setEnabled,
   };
 }

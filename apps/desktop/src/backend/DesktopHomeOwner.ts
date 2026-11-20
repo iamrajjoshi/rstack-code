@@ -13,6 +13,7 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { m } from "../i18n/messages.ts";
 import { BACKEND_QUIT_STOP_TIMEOUT } from "./DesktopBackendManager.ts";
 import { PRODUCT_NAME } from "@t3tools/shared/appIdentity";
+import { CLI_INSTALL_SCRIPT_URL } from "@t3tools/shared/cliRelease";
 
 // The fields of the server's `server-runtime.json` that identify the owner of a T3 home.
 const HomeOwnerRuntimeState = Schema.Struct({
@@ -97,9 +98,9 @@ export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
     onNone: () =>
       m(
         msg(
-          "Another {app} server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's T3 home to each command. Then reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
+          "Another {app} server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Install a current `t3` with `{installCommand}` if it is missing or outdated, and pass `--base-dir` with the service's T3 home to each command. Then reopen {app}. You can also set a separate T3CODE_HOME and pair with the running server.",
         ),
-        { app: PRODUCT_NAME },
+        { app: PRODUCT_NAME, installCommand: `curl -fsSL ${CLI_INSTALL_SCRIPT_URL} | sh` },
       ),
     onSome: (owner) => {
       const variables = {

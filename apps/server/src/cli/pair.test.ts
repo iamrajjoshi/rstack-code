@@ -500,7 +500,7 @@ describe("t3 pair", () => {
           if (Exit.isFailure(exit)) {
             assert.include(
               String(Cause.squash(exit.cause)),
-              `t3@0.0.45 pair --base-dir ${baseDir}`,
+              `T3CODE_VERSION=0.0.45 sh && t3 pair --base-dir ${baseDir}`,
             );
           }
         }),

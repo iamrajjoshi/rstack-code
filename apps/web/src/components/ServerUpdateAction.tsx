@@ -8,6 +8,8 @@ import {
 import { managedUpdatesDenial } from "@t3tools/client-runtime/contract-labels";
 import type { AsyncResult } from "effect/reactivity";
 import { environmentSession } from "~/state/session";
+import { connectionRoutes } from "@t3tools/client-runtime/connection";
+import { environmentCatalog } from "~/connection/catalog";
 import type {
   DesktopUpdateChannel,
   EnvironmentId,
@@ -180,7 +182,7 @@ export function useServerUpdate() {
                   version: result.value.targetVersion,
                 }),
               )
-            : m(msg("Reconnected on t3@{version}.", { version: result.value.targetVersion })),
+            : m(msg("Reconnected on {version}.", { version: result.value.targetVersion })),
       });
     }
     return { status: "updated" };
@@ -310,33 +312,29 @@ export function ServerUpdateAction({
   const canUpdate = useAtomValue(sessionStateAtom, canUpdateServer);
   const updatesDenial = managedUpdatesDenial(useManagedPolicy(environmentId), messages);
   const update = useServerUpdate();
-  const updatesInstall =
-    installation?.kind === "npm-global" || installation?.kind === "t3-launcher";
+  const relaunchSsh = useAtomCommand(environmentCatalog.relaunchSsh, { reportFailure: false });
+  // This desktop launched the server over SSH, so it can relaunch it on its own version.
+  const sshLaunched = useAtomValue(environmentCatalog.catalogValueAtom, (catalog) => {
+    const entry = catalog.entries.get(environmentId);
+    return (
+      entry !== undefined &&
+      connectionRoutes(entry).some((route) => route.target._tag === "SshConnectionTarget")
+    );
+  });
   const { copyToClipboard } = useCopyToClipboard<{ command: string }>({
-    target: updatesInstall
-      ? {
-          target: "update command",
-          unavailableMessage: msg("Clipboard API is unavailable while copying update command."),
-          failureMessage: msg("Failed to copy update command to the clipboard."),
-        }
-      : {
-          target: "relaunch command",
-          unavailableMessage: msg("Clipboard API is unavailable while copying relaunch command."),
-          failureMessage: msg("Failed to copy relaunch command to the clipboard."),
-        },
+    target: {
+      target: "update command",
+      unavailableMessage: msg("Clipboard API is unavailable while copying update command."),
+      failureMessage: msg("Failed to copy update command to the clipboard."),
+    },
     onCopy: ({ command }) => {
       toastManager.add({
         type: "success",
-        title: updatesInstall ? gt("Update command copied") : gt("Relaunch command copied"),
-        description: updatesInstall
-          ? gt("Run `{command}` on {serverLabel}, then restart t3 with your usual options.", {
-              command,
-              serverLabel,
-            })
-          : gt(
-              "Stop t3 on {serverLabel}, then relaunch with `{command}` using the same subcommand and options. This does not update an installed t3 command.",
-              { command, serverLabel },
-            ),
+        title: gt("Update command copied"),
+        description: gt(
+          "Run `{command}` on {serverLabel}, then restart t3 with your usual options.",
+          { command, serverLabel },
+        ),
       });
     },
     onError: (error) => {
@@ -347,6 +345,29 @@ export function ServerUpdateAction({
       });
     },
   });
+
+  const handleSshRelaunch = async () => {
+    if (pendingUpdateEnvironmentIds.has(environmentId)) return;
+    const confirmed =
+      (await requestConfirmDialog(
+        gt("Restart {serverLabel} on {version}? Agents running on it will stop.", {
+          serverLabel,
+          version: targetVersion,
+        }),
+        { initialFocus: "confirm" },
+      )) ?? true;
+    if (!confirmed) return;
+    pendingUpdateEnvironmentIds.add(environmentId);
+    const result = await relaunchSsh(environmentId);
+    pendingUpdateEnvironmentIds.delete(environmentId);
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      toastManager.add({
+        type: "error",
+        title: m(msg("{serverLabel} update failed", { serverLabel })),
+        description: updateFailureMessage(squashAtomCommandFailure(result)),
+      });
+    }
+  };
 
   const handleUpdate = async () => {
     if (
@@ -403,17 +424,19 @@ export function ServerUpdateAction({
   }
 
   const manualCommand =
-    selfUpdate === null ? manualServerUpdateCommand(targetVersion, installation) : null;
+    selfUpdate === null && !sshLaunched
+      ? manualServerUpdateCommand(targetVersion, installation)
+      : null;
   const actionLabel =
     manualCommand !== null
-      ? updatesInstall
-        ? gt("Copy update command")
-        : gt("Copy relaunch command")
+      ? gt("Copy update command")
       : (label ?? gt("Update", { $context: "verb, updates the server" }));
   const onClick =
     manualCommand !== null
       ? () => copyToClipboard(manualCommand, { command: manualCommand })
-      : () => void handleUpdate();
+      : selfUpdate === null
+        ? () => void handleSshRelaunch()
+        : () => void handleUpdate();
 
   if (appearance === "icon") {
     return (
@@ -487,7 +510,7 @@ export function OutdatedServerUpdateAction({
     toastManager.add({
       type: "success",
       title: m(msg("{serverLabel} updated", { serverLabel })),
-      description: m(msg("Reconnected on t3@{version}.", { version: result.value.targetVersion })),
+      description: m(msg("Reconnected on {version}.", { version: result.value.targetVersion })),
     });
   };
   if (fromVersion !== undefined && crossesReleaseTrack(fromVersion, targetVersion)) {

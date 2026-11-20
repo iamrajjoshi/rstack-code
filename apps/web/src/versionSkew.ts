@@ -5,6 +5,7 @@ import type {
   ServerSelfUpdateCapability,
 } from "@t3tools/contracts";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
+import { CLI_INSTALL_SCRIPT_URL } from "@t3tools/shared/cliRelease";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
@@ -108,16 +109,12 @@ export function manualServerUpdateCommand(
   installation?: ServerInstallation,
 ): string {
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-  if (installation?.kind === "npm-global") {
-    return `npm install --global --prefix ${quote(installation.prefix)} t3@${targetVersion}`;
-  }
   if (installation?.kind === "t3-launcher") {
     // An inherited T3CODE_HOME would otherwise send the update to a home the launcher is not in.
     return `${quote(installation.launcher)} update --base-dir ${quote(installation.baseDir)} ${targetVersion}`;
   }
-  const runner =
-    installation?.kind === "pnpm-dlx" ? "pnpm dlx" : installation?.kind === "bunx" ? "bunx" : "npx";
-  return `${runner} t3@${targetVersion}`;
+  // rstack-code: the npm package `t3` is upstream T3 Code, so anything else installs the release.
+  return `curl -fsSL ${CLI_INSTALL_SCRIPT_URL} | T3CODE_VERSION=${targetVersion} sh`;
 }
 
 export function buildVersionMismatchDismissalKey(
