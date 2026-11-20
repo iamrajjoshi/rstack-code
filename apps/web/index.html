@@ -52,6 +52,20 @@
         // Keep this small boot-time copy in sync with the built-in palettes so
         // the selected theme is visible before the app has mounted.
         const BUILT_IN_THEME_PALETTES = {
+          rstack: {
+            light: {
+              background: "#fcfcfc",
+              foreground: "#26272c",
+              accent: "#0075b5",
+              chrome: "#fcfcfc",
+            },
+            dark: {
+              background: "#131318",
+              foreground: "#ebece6",
+              accent: "#49baff",
+              chrome: "#131318",
+            },
+          },
           "t3-chat": {
             light: {
               background: "oklch(0.982446 0.010114 325.653)",
@@ -133,6 +147,7 @@
           "system",
           "light",
           "dark",
+          "rstack",
           "t3-chat",
           "grove",
           "ocean",
@@ -219,7 +234,9 @@
         };
 
         try {
-          const storedTheme = window.localStorage.getItem("t3code:theme");
+          // Mirrors NEW_INSTALL_THEME_ID: the unselected default follows the system.
+          const NEW_INSTALL_THEME_ID = "rstack";
+          const storedTheme = window.localStorage.getItem("t3code:theme") ?? NEW_INSTALL_THEME_ID;
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           const LEGACY_THEME_IDS = {
             "t3-chat-dark": "t3-chat",
@@ -262,7 +279,7 @@
               ? "system"
               : storedFollowSystem === "false"
                 ? preferenceMode
-                : theme === "system"
+                : theme === "system" || theme === NEW_INSTALL_THEME_ID
                   ? "system"
                   : preferenceMode;
           // A valid mix half for the wanted appearance takes over: it decides

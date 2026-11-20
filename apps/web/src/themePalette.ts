@@ -13,6 +13,7 @@ import {
   GROVE_THEME,
   IRIS_THEME,
   OCEAN_THEME,
+  RSTACK_THEME,
   T3_CHAT_THEME,
   T3_CODE_LIGHT_THEME_COLORS,
   T3_CODE_DARK_THEME_COLORS,
@@ -36,7 +37,15 @@ import { applyThemeBackground } from "./themeBackground";
 import { applyThemeCss } from "./themeCss";
 import { themeServerEnvironmentThemesAtom } from "./state/server";
 
-export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, T3_CHAT_THEME, THEME_COLOR_ROLES };
+export {
+  EMBER_THEME,
+  GROVE_THEME,
+  IRIS_THEME,
+  OCEAN_THEME,
+  RSTACK_THEME,
+  T3_CHAT_THEME,
+  THEME_COLOR_ROLES,
+};
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
 
 const T3_CHAT_THEME_ID = "t3-chat" as const;
@@ -52,6 +61,9 @@ export const THEME_HALVES_STORAGE_KEY = "t3code:theme-halves:v1";
 export const ENVIRONMENT_THEMES_STORAGE_KEY = "t3code:environment-themes:v1";
 
 const LEGACY_T3_CHAT_DARK_THEME_ID = "t3-chat-dark";
+
+/** Used, following the system appearance, until a theme is stored; index.html mirrors this. */
+export const NEW_INSTALL_THEME_ID = RSTACK_THEME.id;
 
 export const ThemePreference = Schema.String;
 export type ThemePreference = typeof ThemePreference.Type;

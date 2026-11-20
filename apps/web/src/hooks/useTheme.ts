@@ -10,6 +10,7 @@ import {
   canonicalThemePreference,
   isKnownThemePreference,
   getThemePreferenceMode,
+  NEW_INSTALL_THEME_ID,
   getThemePreviewAppearance,
   parseThemeHalves,
   resolveDesktopTheme,
@@ -144,7 +145,10 @@ function getSystemDark() {
 }
 
 function readStoredFollowSystem(theme: Theme): boolean {
-  if (typeof window === "undefined") return theme === "system";
+  // setTheme stores a mode with every theme, so the new-install theme without one is the
+  // unselected default, which follows the system like "system" does.
+  const followsByDefault = theme === "system" || theme === NEW_INSTALL_THEME_ID;
+  if (typeof window === "undefined") return followsByDefault;
 
   try {
     const raw = window.localStorage.getItem(THEME_FOLLOW_SYSTEM_STORAGE_KEY);
@@ -152,7 +156,7 @@ function readStoredFollowSystem(theme: Theme): boolean {
     if (raw === "false") return false;
   } catch {}
 
-  return theme === "system";
+  return followsByDefault;
 }
 
 function isThemePreferenceMode(value: string | null): value is ThemePreferenceMode {
@@ -196,7 +200,8 @@ export function readThemePreference(): Theme {
       cause,
     });
   }
-  if (raw !== null && isKnownThemePreference(raw)) {
+  if (raw === null) return NEW_INSTALL_THEME_ID;
+  if (isKnownThemePreference(raw)) {
     return canonicalThemePreference(raw);
   }
   return DEFAULT_THEME_SNAPSHOT.theme;

@@ -7,9 +7,9 @@ import {
   getDefaultThemeColors,
   getThemeColorsForMode,
   invalidateCustomThemes,
-  isKnownThemePreference,
   publishedThemeDefinitions,
   resolveThemeAppearance,
+  RSTACK_THEME,
   T3_CHAT_THEME,
   EMBER_THEME,
   GROVE_THEME,
@@ -19,6 +19,7 @@ import {
   THEME_FOLLOW_SYSTEM_STORAGE_KEY,
   toCanonicalThemeColor,
 } from "./themePalette";
+import { readAppearanceModePreference, readThemePreference } from "./hooks/useTheme";
 
 const THEME_STORAGE_KEY = "t3code:theme";
 const DEFAULT_DARK_CHROME = getDefaultThemeColors("dark").chrome;
@@ -111,22 +112,9 @@ function runtimeResolvedAppearance(
   });
   invalidateCustomThemes();
   try {
-    const raw = storage[THEME_STORAGE_KEY] ?? null;
-    const theme = raw !== null && isKnownThemePreference(raw) ? raw : "system";
-    const followRaw = storage[THEME_FOLLOW_SYSTEM_STORAGE_KEY] ?? null;
-    const appearanceRaw = storage[THEME_APPEARANCE_MODE_STORAGE_KEY] ?? null;
-    const appearanceMode =
-      appearanceRaw === "light" || appearanceRaw === "dark" || appearanceRaw === "system"
-        ? appearanceRaw
-        : followRaw === "true"
-          ? "system"
-          : followRaw === "false"
-            ? null
-            : theme === "system"
-              ? "system"
-              : null;
-    const followSystem = appearanceMode === "system";
-    return resolveThemeAppearance(theme, prefersDark, followSystem, appearanceMode ?? undefined);
+    const theme = readThemePreference();
+    const appearanceMode = readAppearanceModePreference(theme);
+    return resolveThemeAppearance(theme, prefersDark, appearanceMode === "system", appearanceMode);
   } finally {
     vi.unstubAllGlobals();
     invalidateCustomThemes();
@@ -154,6 +142,17 @@ describe("index.html boot script", () => {
     prefersDark: boolean;
   }> = [
     { name: "no stored preference on a dark OS", storage: {}, prefersDark: true },
+    { name: "no stored preference on a light OS", storage: {}, prefersDark: false },
+    {
+      name: "a stored light mode without a stored theme keeps light",
+      storage: { [THEME_APPEARANCE_MODE_STORAGE_KEY]: "light" },
+      prefersDark: true,
+    },
+    {
+      name: "the standard theme, once chosen, stays chosen",
+      storage: { [THEME_STORAGE_KEY]: "system", [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system" },
+      prefersDark: true,
+    },
     {
       name: "T3 Chat follows a dark OS",
       storage: { [THEME_STORAGE_KEY]: "t3-chat", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
@@ -309,8 +308,33 @@ describe("index.html boot script", () => {
     expect(boot.backgroundColor).toBe(published.colors.chrome);
   });
 
+  it("paints the new-install theme when no theme is stored, and only then", () => {
+    for (const prefersDark of [true, false]) {
+      const boot = runBootScript({ storage: {}, prefersDark });
+      const colors = getThemeColorsForMode(RSTACK_THEME, prefersDark ? "dark" : "light")!;
+      expect(boot.themeId).toBe(RSTACK_THEME.id);
+      expect(boot.isDark).toBe(prefersDark);
+      expect(boot.bootVariables["--boot-background"]).toBe(colors.canvas);
+      expect(boot.backgroundColor).toBe(colors.chrome);
+    }
+
+    const standard = runBootScript({
+      storage: { [THEME_STORAGE_KEY]: "system", [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system" },
+      prefersDark: true,
+    });
+    expect(standard.themeId).toBeUndefined();
+    expect(standard.backgroundColor).toBe("#000000");
+  });
+
   it("keeps every built-in boot splash in sync with the real palettes", () => {
-    for (const theme of [T3_CHAT_THEME, GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME]) {
+    for (const theme of [
+      RSTACK_THEME,
+      T3_CHAT_THEME,
+      GROVE_THEME,
+      OCEAN_THEME,
+      EMBER_THEME,
+      IRIS_THEME,
+    ]) {
       expect(theme.appearance).toBe("light");
       for (const mode of ["light", "dark"] as const) {
         const colors = getThemeColorsForMode(theme, mode);
