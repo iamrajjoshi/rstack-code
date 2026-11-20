@@ -1,3 +1,5 @@
+> **rstack code** is a personal fork of [T3 Code](https://github.com/pingdotgg/t3code) (MIT). It is not affiliated with or endorsed by T3 Tools. It sends no analytics by default and updates only from this repository's releases. The rest of this README is upstream's.
+
 <p align="center">
   <a href="https://t3.codes">
     <img src="./assets/prod/t3-black-web-icon-192x192.png" width="80" height="80" alt="T3 Code logo" />

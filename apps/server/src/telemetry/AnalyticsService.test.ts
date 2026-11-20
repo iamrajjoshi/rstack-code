@@ -438,4 +438,39 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("AnalyticsService
       assert.deepEqual(capturedPaths, []);
     }),
   );
+
+  it.effect("sends nothing by default or without a configured PostHog key and host", () =>
+    Effect.gen(function* () {
+      for (const env of [{}, { T3CODE_TELEMETRY_ENABLED: true }]) {
+        const requests: Array<string> = [];
+        const client = HttpClient.make((request) =>
+          Effect.sync(() => {
+            requests.push(request.url);
+          }).pipe(Effect.andThen(respondWithStatus(204)(request))),
+        );
+        const layerRuntime = AnalyticsService.layer.pipe(
+          Layer.provideMerge(
+            ServerConfig.ServerConfig.layerTest(process.cwd(), { prefix: "t3-telemetry-unset-" }),
+          ),
+          Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))),
+          Layer.provide(
+            Layer.mergeAll(
+              Layer.succeed(HostProcess.Platform, "linux"),
+              Layer.succeed(HostProcess.Architecture, "arm64"),
+              Layer.succeed(HttpClient.HttpClient, client),
+              ManagedPolicy.layerTest(),
+            ),
+          ),
+        );
+
+        yield* Effect.gen(function* () {
+          const analytics = yield* AnalyticsService.AnalyticsService;
+          yield* analytics.record("test.unset", { index: 1 });
+          yield* analytics.flush;
+        }).pipe(Effect.provide(layerRuntime));
+
+        assert.deepEqual(requests, [], JSON.stringify(env));
+      }
+    }),
+  );
 });
