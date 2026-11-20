@@ -62,6 +62,11 @@ it when it is older; upstream leaves such a server running.
   with `T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH=<server entry script on the host>` to run a source
   checkout there with the host's Node.
 
+## rstack-board
+
+`apps/server/src/board/` runs the `rstack-board` CLI (never its SQLite file) for Settings, the `board_*` tools in `t3-code` and the board paragraph coordinators and their workers get; see [the user guide](../user/board.md).
+Tests use a fake CLI script; never point a test or dev server at the real `~/.rstack-board` (the board reads `RSTACK_BOARD_STATE_DIR`).
+
 ## Syncing with upstream
 
 ```bash

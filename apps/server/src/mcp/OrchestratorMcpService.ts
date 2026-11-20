@@ -140,6 +140,7 @@ import { assertTargetWithinLimits, isLiveCallerShell, threadNotFound } from "./t
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as PeerForwarding from "../peer/PeerForwarding.ts";
 import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
+import * as BoardService from "../board/BoardService.ts";
 
 // Return recoverable handles before common MCP client timeouts expire.
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
@@ -1320,6 +1321,8 @@ const make = Effect.gen(function* () {
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const remoteDelegation = yield* RemoteDelegation.RemoteDelegation;
+  // rstack-code: optional so hosts and tests without the board need not provide it.
+  const board = yield* Effect.serviceOption(BoardService.BoardService);
   // Two delegations landing together must not both pass a coordinator's worker limit.
   const coordinatorDelegations = yield* KeyedLock.make<ThreadId>();
 
@@ -2813,6 +2816,7 @@ const make = Effect.gen(function* () {
               ? coordinatorSettings.coordinatorWorkerIsolation
               : undefined,
           standingInstructions: coordinatorSettings.coordinatorStandingInstructions,
+          boardConnected: Option.isSome(board) ? yield* board.value.isConnected : false,
         });
       }
       const requireWorkerCapacity =

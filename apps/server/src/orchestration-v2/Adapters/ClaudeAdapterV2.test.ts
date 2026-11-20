@@ -88,6 +88,7 @@ import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import {
+  T3_CODE_BOARD_INSTRUCTIONS,
   T3_CODE_COORDINATOR_INSTRUCTIONS,
   T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
@@ -913,7 +914,7 @@ describe("ClaudeAdapterV2 device instructions", () => {
   });
 
   it("appends the coordinator section only to a coordinator thread with T3 tools", () => {
-    const withRole = (coordinator: boolean | undefined, mcp = true) =>
+    const withRole = (coordinator: boolean | undefined, mcp = true, boardConnected = false) =>
       (
         ClaudeAdapterV2.makeClaudeQueryOptions({
           modelSelection: {
@@ -927,11 +928,18 @@ describe("ClaudeAdapterV2 device instructions", () => {
             ? { mcpServers: { "t3-code": { type: "http" as const, url: "http://127.0.0.1/mcp" } } }
             : {}),
           ...(coordinator === undefined ? {} : { coordinator }),
+          ...(boardConnected ? { boardConnected } : {}),
           environment: {},
         }).systemPrompt as { readonly append?: string }
       ).append ?? "";
     const plain = withRole(undefined);
     assert.equal(withRole(true), `${plain}\n${T3_CODE_COORDINATOR_INSTRUCTIONS}\n`);
+    // rstack-code: the board adds one paragraph to coordinators only.
+    assert.equal(
+      withRole(true, true, true),
+      `${plain}\n${T3_CODE_COORDINATOR_INSTRUCTIONS}\n\n${T3_CODE_BOARD_INSTRUCTIONS}\n`,
+    );
+    assert.equal(withRole(undefined, true, true), plain);
     assert.equal(withRole(false), plain);
     assert.notInclude(plain, "## T3 Code coordinator");
     assert.notInclude(withRole(true, false), "## T3 Code coordinator");

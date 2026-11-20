@@ -809,6 +809,8 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
     readonly browserToolsAvailable?: boolean;
     readonly deviceToolsAvailable?: boolean;
     readonly coordinator?: boolean;
+    /** rstack-code: adds the board paragraph to the coordinator section. */
+    readonly boardConnected?: boolean;
     /** ChatGPT token sharing does not accept service tiers. */
     readonly omitServiceTier?: boolean;
     readonly appContext?: ProviderAdapter.ProviderAdapterV2TurnInput["appContext"];
@@ -859,6 +861,7 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
               device: input.deviceToolsAvailable ?? false,
             },
             input.coordinator === true,
+            input.boardConnected === true,
           )
         : undefined;
     const additionalContext =
@@ -7585,6 +7588,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               browserToolsAvailable: mcpSession?.browserToolsAvailable ?? true,
               deviceToolsAvailable: mcpSession?.capabilities?.has("device") ?? false,
               coordinator: turnInput.appThread.coordinator === true,
+              boardConnected: turnInput.boardConnected === true,
               omitServiceTier: adapterOptions.resolveRuntime !== undefined,
               ...(turnInput.appContext === undefined ? {} : { appContext: turnInput.appContext }),
               ...(configuredReasoningSummary === undefined ? {} : { configuredReasoningSummary }),

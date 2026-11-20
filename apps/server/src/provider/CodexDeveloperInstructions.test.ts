@@ -1,6 +1,7 @@
 import * as NodeAssert from "node:assert/strict";
 
 import {
+  T3_CODE_BOARD_INSTRUCTIONS,
   T3_CODE_COORDINATOR_INSTRUCTIONS,
   T3_CODE_DEVICE_TOOL_INSTRUCTIONS,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
@@ -81,6 +82,15 @@ describe("Codex coordinator context", () => {
     NodeAssert.deepEqual(coordinator, {
       ...plain,
       t3_code_coordinator: { kind: "application", value: T3_CODE_COORDINATOR_INSTRUCTIONS },
+    });
+    // rstack-code: the board adds one paragraph to coordinators only.
+    NodeAssert.deepEqual(buildCodexAdditionalContext(runtime, true, false, true), plain);
+    NodeAssert.deepEqual(buildCodexAdditionalContext(runtime, true, true, true), {
+      ...plain,
+      t3_code_coordinator: {
+        kind: "application",
+        value: `${T3_CODE_COORDINATOR_INSTRUCTIONS}\n\n${T3_CODE_BOARD_INSTRUCTIONS}`,
+      },
     });
   });
 });

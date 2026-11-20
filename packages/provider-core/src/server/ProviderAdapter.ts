@@ -559,6 +559,8 @@ export interface ProviderAdapterV2TurnInput {
   readonly modelSelection: ModelSelection;
   readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
   readonly appContext?: ReadonlyArray<{ readonly key: string; readonly text: string }>;
+  /** rstack-code: a coordinator thread's turn while rstack-board is connected. */
+  readonly boardConnected?: true;
 }
 
 export type ProviderAdapterV2ResumeTurnInput = Omit<

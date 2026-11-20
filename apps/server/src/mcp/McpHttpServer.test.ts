@@ -53,6 +53,7 @@ import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerHttp from "../http.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as BoardService from "../board/BoardService.ts";
 import { advertisedJsonSchema } from "./advertisedJsonSchema.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpToolAccess from "./McpToolAccess.ts";
@@ -1634,6 +1635,158 @@ it.effect("gives outside clients an upload URL on the origin their request reach
       expect(new URL(proxied.uploadUrl).protocol).toBe("https:");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect(
+  "lists board tools only while the board answers, and checks in as the calling thread",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const token = "boardToken";
+        const workerId = ThreadId.make("thread-worker");
+        const coordinatorId = ThreadId.make("thread-coord");
+        const scope: McpInvocationContext.McpThreadInvocationScope = {
+          environmentId,
+          requestNamespace: token,
+          thread: {
+            threadId: workerId,
+            providerSessionId: token,
+            providerInstanceId: ProviderInstanceId.make("codex"),
+          },
+          client: undefined,
+          capabilities: new Set(["orchestration"]),
+          issuedAt: 1,
+        };
+        let connected = false;
+        const commands: Array<BoardService.BoardCommand> = [];
+        const shells = {
+          [workerId]: {
+            ...McpToolAccessTestkit.liveThreadShell(workerId),
+            title: "Fix flaky search test",
+            lineage: {
+              rootThreadId: coordinatorId,
+              parentThreadId: coordinatorId,
+              relationshipToParent: "subagent" as const,
+            },
+          },
+          [coordinatorId]: {
+            ...McpToolAccessTestkit.liveThreadShell(coordinatorId),
+            title: "Ship search v2",
+            coordinator: true,
+          },
+        };
+        const serverLayer = McpHttpServer.layerMcpTransport(McpHttpServer.layerBoardToolkit).pipe(
+          Layer.provide(
+            Layer.mock(BoardService.BoardService)({
+              isConnected: Effect.sync(() => connected),
+              run: (command) => {
+                commands.push(command);
+                return Effect.succeed({
+                  id: "msg_1",
+                  channel: "ship-search-v2-utk1sl/workers",
+                  labels: { state: "working" },
+                } as never);
+              },
+            }),
+          ),
+          Layer.provide(
+            Layer.mock(ThreadManagementService.ThreadManagementService)({
+              getThreadShell: (threadId) => Effect.succeed(shells[threadId] ?? null),
+            }),
+          ),
+          Layer.provide(
+            Layer.mock(ProjectService.ProjectService)({
+              getById: () => Effect.succeedSome({ title: "rstack Code" } as never),
+            }),
+          ),
+          Layer.provide(ServerSettings.layerTest({ boardEnabled: true })),
+          Layer.provide(
+            Layer.mock(McpSessionRegistry.McpSessionRegistry)({
+              resolve: (presented) => Effect.succeed(presented === token ? scope : undefined),
+            }),
+          ),
+        );
+        yield* HttpRouter.serve(serverLayer, { disableListenLog: true, disableLogger: true }).pipe(
+          Layer.build,
+        );
+        const httpClient = yield* HttpClient.HttpClient;
+        const headers = {
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+        };
+        const initialize = yield* httpClient.post("/mcp", {
+          headers,
+          body: HttpBody.text(
+            `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0.0"}}}`,
+            "application/json",
+          ),
+        });
+        const rpc = (method: string, params: object) =>
+          httpClient
+            .post("/mcp", {
+              headers: {
+                ...headers,
+                "mcp-session-id": initialize.headers["mcp-session-id"]!,
+                "mcp-protocol-version": "2025-06-18",
+              },
+              body: HttpBody.text(
+                JSON.stringify({ jsonrpc: "2.0", id: 2, method, params }),
+                "application/json",
+              ),
+            })
+            .pipe(Effect.flatMap((response) => response.json));
+        const listed = rpc("tools/list", {}).pipe(
+          Effect.map((body) =>
+            (body as { result: { tools: ReadonlyArray<{ name: string }> } }).result.tools.map(
+              (tool) => tool.name,
+            ),
+          ),
+        );
+
+        expect(yield* listed).toEqual([]);
+        connected = true;
+        expect(yield* listed).toEqual([
+          "board_checkin",
+          "board_post",
+          "board_reply",
+          "board_read",
+          "board_label",
+          "board_claim",
+          "board_complete",
+        ]);
+        const checkin = (yield* rpc("tools/call", {
+          name: "board_checkin",
+          arguments: { status: "needs_input", note: "Which analyzer?", needs: "decision" },
+        })) as { result: { structuredContent: unknown } };
+        expect(checkin.result.structuredContent).toEqual({
+          id: "msg_1",
+          channel: "ship-search-v2-utk1sl/workers",
+          labels: { state: "working" },
+        });
+        expect(commands).toEqual([
+          {
+            args: [
+              "checkin",
+              "--file",
+              "-",
+              "--state",
+              "blocked",
+              "--coordinator",
+              "ship-search-v2-utk1sl",
+              "--needs",
+              "decision",
+              "--label",
+              `t3=${workerId}`,
+              "--label",
+              `env=${environmentId}`,
+            ],
+            as: "fix-flaky-search-test-38fh3u",
+            stdin: "Which analyzer?",
+            threadId: workerId,
+          },
+        ]);
+      }),
+    ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
 
 it.effect("hides tools for links and refuses another environment while the beta is off", () =>

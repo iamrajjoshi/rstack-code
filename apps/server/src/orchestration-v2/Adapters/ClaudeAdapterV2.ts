@@ -214,9 +214,9 @@ import {
 } from "../../provider/claudeUsageLimits.ts";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import {
-  T3_CODE_COORDINATOR_INSTRUCTIONS,
   T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
+  t3CodeCoordinatorInstructions,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import {
@@ -2266,6 +2266,8 @@ export function makeClaudeQueryOptions(input: {
   readonly deviceToolsAvailable?: boolean;
   /** The user marked the thread as a coordinator. */
   readonly coordinator?: boolean;
+  /** rstack-code: adds the board paragraph to the coordinator section. */
+  readonly boardConnected?: boolean;
   readonly tools?: ClaudeAgentSdkQueryTools;
   readonly allowedTools?: ReadonlyArray<string>;
   readonly disallowedTools?: ReadonlyArray<string>;
@@ -2431,7 +2433,9 @@ export function makeClaudeQueryOptions(input: {
               (deviceInstructions
                 ? `\n${T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH}\n`
                 : "") +
-              (input.coordinator === true ? `\n${T3_CODE_COORDINATOR_INSTRUCTIONS}\n` : "")),
+              (input.coordinator === true
+                ? `\n${t3CodeCoordinatorInstructions(input.boardConnected === true)}\n`
+                : "")),
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
@@ -12962,8 +12966,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               : { allowedTools: queryPolicy.allowedTools }),
           });
           const coordinator = turnInput.appThread.coordinator === true;
+          const boardConnected = coordinator && turnInput.boardConnected === true;
           // The system prompt carries the coordinator section, so a toggle reopens the query.
-          const queryPolicyKey = `${claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides)}${coordinator ? ":coordinator" : ""}`;
+          const queryPolicyKey = `${claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides)}${coordinator ? ":coordinator" : ""}${boardConnected ? ":board" : ""}`;
           const resumeSessionAt = yield* getNativeConversationHeadId(turnInput.providerThread);
           const existing = yield* Ref.get(queryContext);
           // Continuations drain existing output without prompting; retain the live process regardless of selection.
@@ -13121,6 +13126,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               : { mcpServers: mcpOverrides.mcpServers }),
             deviceToolsAvailable: mcpSession?.capabilities?.has("device") === true,
             coordinator,
+            boardConnected,
             permissionMode: queryPolicy.permissionMode,
             ...(queryPolicy.allowDangerouslySkipPermissions === undefined
               ? {}

@@ -29,6 +29,7 @@ import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -40,6 +41,7 @@ import * as Stream from "effect/Stream";
 
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
+import * as BoardService from "../board/BoardService.ts";
 import * as PreviewAgentActivity from "../preview/PreviewAgentActivity.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as CheckpointService from "./CheckpointService.ts";
@@ -718,6 +720,8 @@ export const layer: Layer.Layer<
     const finalizationObserver = yield* RunFinalizationService.RunFinalizationObserver;
     const turnAnalytics = yield* ProviderUsageAnalytics.ProviderTurnAnalytics;
     const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+    // rstack-code: optional so harnesses and tests without the board need not provide it.
+    const board = yield* Effect.serviceOption(BoardService.BoardService);
 
     const writeFinalRunEvents = Effect.fn("RunExecutionService.writeFinalRunEvents")(
       function* (input: {
@@ -2204,6 +2208,11 @@ export const layer: Layer.Layer<
           mcpAppModelContext,
           input.run.threadId,
         );
+        // Only coordinator turns carry board instructions, so only they ask about the board.
+        const boardConnected =
+          input.appThread.coordinator === true && Option.isSome(board)
+            ? yield* board.value.isConnected
+            : false;
         const turnInput = {
           appThread: input.appThread,
           threadId: input.run.threadId,
@@ -2225,6 +2234,7 @@ export const layer: Layer.Layer<
           modelSelection: input.modelSelection,
           runtimePolicy: input.runtimePolicy,
           ...(appContext.length === 0 ? {} : { appContext }),
+          ...(boardConnected ? { boardConnected: true as const } : {}),
         };
         // Check after the context read: ingestion can settle the run while
         // it awaits. A failed ownership read fails the start below.

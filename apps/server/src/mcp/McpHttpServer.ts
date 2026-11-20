@@ -58,6 +58,10 @@ import * as PreviewControlsHandlers from "./toolkits/previewControls/handlers.ts
 import { EnvironmentToolkit } from "./toolkits/environment/tools.ts";
 import * as EnvironmentHandlers from "./toolkits/environment/handlers.ts";
 import { ThemeToolkit } from "./toolkits/theme/tools.ts";
+import { BoardToolkit } from "./toolkits/board/tools.ts";
+import * as BoardHandlers from "./toolkits/board/handlers.ts";
+import * as BoardBridge from "../board/BoardBridge.ts";
+import * as BoardService from "../board/BoardService.ts";
 import * as ThemeHandlers from "./toolkits/theme/handlers.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
 import * as ProjectHandlers from "./toolkits/project/handlers.ts";
@@ -1342,6 +1346,19 @@ const layerThemeToolkit = toolkitRegistration(ThemeToolkit, ThemeHandlers.layer)
   Layer.provide(ThreadCommandExecutor.layer),
 );
 
+/** Listed and callable only while the board is turned on and its CLI answers, so others pay nothing. */
+const layerBoardVisibility = McpServer.visibility(
+  Effect.gen(function* () {
+    const board = yield* BoardService.BoardService;
+    return () => board.isConnected;
+  }),
+);
+
+export const layerBoardToolkit = toolkitRegistration(BoardToolkit, BoardHandlers.layer).pipe(
+  Layer.provide(layerBoardVisibility.layer),
+  Layer.provide(BoardBridge.layer),
+);
+
 export const layerProjectRegistration = toolkitRegistration(ProjectToolkit, ProjectHandlers.layer);
 
 export const layerAttachmentToolkit = toolkitRegistration(
@@ -1409,6 +1426,7 @@ export const layerTools = Layer.mergeAll(
   layerProjectRegistration,
   layerEnvironmentToolkit,
   layerThemeToolkit,
+  layerBoardToolkit,
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,

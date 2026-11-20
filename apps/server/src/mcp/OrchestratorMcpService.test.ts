@@ -78,6 +78,7 @@ import type { McpInvocationScope } from "./McpInvocationContext.ts";
 import { idleThreadProjection, liveThreadShell } from "./McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
 import { resolveRuntimeMode, withCoordinatorDefaults } from "./delegatedTaskModes.ts";
+import { T3_CODE_BOARD_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import type { ProjectionRecordFilter } from "../orchestration-v2/ProjectionStore.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
@@ -3012,6 +3013,25 @@ describe("OrchestratorMcpService provider resolution", () => {
           },
           isolation: "shared",
         },
+      );
+    });
+
+    it("adds the board paragraph to worker tasks only while the board is connected", () => {
+      const defaults = {
+        modelSelection: { instanceId: claudeInstanceId, model: "claude-opus-5-5" },
+        isolation: undefined,
+        standingInstructions: "Name branches raj--<area>--<topic>.",
+      };
+      const standing =
+        "Fix it.\n\nStanding instructions from the user:\nName branches raj--<area>--<topic>.";
+      assert.equal(withCoordinatorDefaults({ task: "Fix it." }, defaults).task, standing);
+      assert.equal(
+        withCoordinatorDefaults({ task: "Fix it." }, { ...defaults, boardConnected: false }).task,
+        standing,
+      );
+      assert.equal(
+        withCoordinatorDefaults({ task: "Fix it." }, { ...defaults, boardConnected: true }).task,
+        `${standing}\n\n${T3_CODE_BOARD_INSTRUCTIONS}`,
       );
     });
   });

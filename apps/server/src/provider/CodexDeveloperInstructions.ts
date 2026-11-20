@@ -3,9 +3,9 @@ import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeI
 
 import {
   T3_CODE_BROWSER_TOOL_INSTRUCTIONS,
-  T3_CODE_COORDINATOR_INSTRUCTIONS,
   T3_CODE_DEVICE_TOOL_INSTRUCTIONS,
   T3_CODE_ORCHESTRATION_SECTIONS,
+  t3CodeCoordinatorInstructions,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
 
 /** Codex silently truncates additionalContext values over 1,000 tokens, counted as UTF-8 bytes / 4. */
@@ -43,6 +43,7 @@ export function buildCodexAdditionalContext(
   runtime: CodexRuntimeInfo,
   toolsAvailable: boolean | T3CodeToolAvailability = true,
   coordinator = false,
+  boardConnected = false,
 ): Record<string, V2TurnStartParams__AdditionalContextEntry> {
   const tools = toolInstructions(toolsAvailable);
   // Split values to fit per-entry caps; number keys because Codex emits them in key order.
@@ -59,7 +60,12 @@ export function buildCodexAdditionalContext(
     },
     ...(tools ? { t3_code_tools: { kind: "application", value: tools } } : {}),
     ...(coordinator
-      ? { t3_code_coordinator: { kind: "application", value: T3_CODE_COORDINATOR_INSTRUCTIONS } }
+      ? {
+          t3_code_coordinator: {
+            kind: "application",
+            value: t3CodeCoordinatorInstructions(boardConnected),
+          },
+        }
       : {}),
   };
 }

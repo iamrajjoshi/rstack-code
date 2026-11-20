@@ -1591,6 +1591,14 @@ export const ServerSettings = Schema.Struct({
   coordinatorStandingInstructions: TrimmedString.pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
   ),
+  /** rstack-board: agents get the `board_*` tools once the CLI answers. */
+  boardEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Empty finds `rstack-board` on PATH, then in ~/.local/bin. */
+  boardCliPath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** Where `board_post` goes when the agent names no channel. Empty uses the project's name. */
+  boardChannel: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** Post as a handle derived from the calling thread, under its coordinator. */
+  boardAutoIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 
   pullRequestMergeMethod: Schema.NullOr(PullRequestMergeMethod).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -1990,6 +1998,10 @@ export const ServerSettingsPatch = Schema.Struct({
   coordinatorWorkerIsolation: Schema.optionalKey(CoordinatorWorkerIsolation),
   coordinatorMaxParallelWorkers: Schema.optionalKey(CoordinatorMaxParallelWorkers),
   coordinatorStandingInstructions: Schema.optionalKey(TrimmedString),
+  boardEnabled: Schema.optionalKey(Schema.Boolean),
+  boardCliPath: Schema.optionalKey(TrimmedString),
+  boardChannel: Schema.optionalKey(TrimmedString),
+  boardAutoIdentity: Schema.optionalKey(Schema.Boolean),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
   observability: Schema.optionalKey(
     Schema.Struct({
@@ -2047,7 +2059,9 @@ export function requiredScopesForServerSettingsPatch(
       key === "providerInstances" ||
       key === "usageLimitSources" ||
       key === "textGenerators" ||
-      key === "secretProviders"
+      key === "secretProviders" ||
+      // The server runs this executable, as it runs a provider's binary.
+      key === "boardCliPath"
     ) {
       changesProviders = true;
     } else {

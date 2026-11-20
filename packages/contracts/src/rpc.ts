@@ -438,6 +438,7 @@ import {
   SourceControlSignInResult,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import { BoardStatus } from "./board.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
@@ -577,6 +578,7 @@ export const WS_METHODS = {
   serverReportClientActivity: "server.reportClientActivity",
   serverGetUsageSummary: "server.getUsageSummary",
   serverRefreshUsageRates: "server.refreshUsageRates",
+  boardStatus: "board.status",
 
   scheduledTasksSubscribe: "scheduledTasks.subscribe",
   scheduledTasksUpsert: "scheduledTasks.upsert",
@@ -1049,6 +1051,13 @@ const WsServerRetryResourceTelemetryRpc = Rpc.make(WS_METHODS.serverRetryResourc
 const WsServerCheckOtlpEndpointRpc = Rpc.make(WS_METHODS.serverCheckOtlpEndpoint, {
   payload: OtlpEndpointCheckInput,
   success: OtlpEndpointCheckResult,
+  error: EnvironmentAuthorizationError,
+});
+
+// Runs the board CLI, so it is a settings action rather than a free read.
+const WsBoardStatusRpc = Rpc.make(WS_METHODS.boardStatus, {
+  payload: Schema.Struct({}),
+  success: BoardStatus,
   error: EnvironmentAuthorizationError,
 });
 
@@ -2325,6 +2334,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetResourceTelemetryHistoryRpc,
   WsServerRetryResourceTelemetryRpc,
   WsServerCheckOtlpEndpointRpc,
+  WsBoardStatusRpc,
   WsServerListTextGeneratorModelsRpc,
   WsServerPrepareTriageRpc,
   WsServerGetUsageSummaryRpc,

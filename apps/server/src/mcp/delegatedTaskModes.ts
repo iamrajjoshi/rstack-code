@@ -8,6 +8,7 @@ import {
   type RuntimeMode,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { T3_CODE_BOARD_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 
 /** How much a runtime mode allows, narrowest first. */
 export function runtimeModeRank(mode: RuntimeMode): number {
@@ -99,6 +100,8 @@ export function withCoordinatorDefaults(
     /** Undefined leaves isolation to the agent and the target. */
     readonly isolation: "worktree" | "shared" | undefined;
     readonly standingInstructions: string;
+    /** rstack-code: rstack-board is connected, so the worker gets its paragraph. */
+    readonly boardConnected?: boolean;
   },
 ): OrchestratorMcpDelegateTaskInput {
   const isolation = input.isolation ?? defaults.isolation;
@@ -121,10 +124,13 @@ export function withCoordinatorDefaults(
             : {}),
         },
     ...(isolation === undefined ? {} : { isolation }),
-    task:
-      defaults.standingInstructions === ""
-        ? input.task
-        : `${input.task}\n\nStanding instructions from the user:\n${defaults.standingInstructions}`,
+    task: [
+      input.task,
+      ...(defaults.standingInstructions === ""
+        ? []
+        : [`Standing instructions from the user:\n${defaults.standingInstructions}`]),
+      ...(defaults.boardConnected === true ? [T3_CODE_BOARD_INSTRUCTIONS] : []),
+    ].join("\n\n"),
   };
 }
 

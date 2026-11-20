@@ -74,6 +74,7 @@ import { scopedIdleCompaction } from "./scopedSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ThreadTitleInstructionsSettings } from "./ThreadTitleInstructionsSettings";
 import { CoordinatorSettings } from "./CoordinatorSettings";
+import { BoardSettings } from "./BoardSettings";
 import { SnoozePresetsRow } from "./SnoozePresetsSettings";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import { managedTelemetryOffMessage, usePrimaryManagedPolicy } from "../../state/managedPolicy";
@@ -2069,6 +2070,8 @@ export function ThreadsSettingsPanel() {
       </SettingsSection>
 
       {!isProjectScope ? <CoordinatorSettings /> : null}
+
+      {!isProjectScope ? <BoardSettings /> : null}
 
       {hasServerTargets ? (
         <SettingsSection id="auto-settle" title={gt("Auto-settle")}>
