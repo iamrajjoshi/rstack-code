@@ -6118,20 +6118,6 @@
   ],
   "216ab7514aea1d61": "Ohne Agenten starten",
   "501ce2d99da8bfd1": "Richte einen Agenten ein, um zu starten.",
-  "7da791b649c8a9e2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " erfasst anonyme Nutzungsdaten, um die App zu verbessern. Wie du widersprichst, steht in der ",
-    {
-      "t": "a",
-      "i": 2,
-      "c": "Datenschutzerklärung"
-    },
-    "."
-  ],
   "b33f35083757b42c": [
     "Siehe",
     " ",

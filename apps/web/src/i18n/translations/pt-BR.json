@@ -6119,21 +6119,6 @@
   ],
   "216ab7514aea1d61": "Começar sem agente",
   "501ce2d99da8bfd1": "Configure um agente para começar.",
-  "7da791b649c8a9e2": [
-    "O ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " coleta dados de uso anônimos para melhorar o app. Para recusar, consulte a ",
-    {
-      "t": "a",
-      "i": 2,
-      "c": "política de privacidade"
-    },
-    "."
-  ],
   "b33f35083757b42c": [
     "Consulte a",
     " ",

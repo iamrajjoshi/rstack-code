@@ -6119,20 +6119,6 @@
   ],
   "216ab7514aea1d61": "Commencer sans agent",
   "501ce2d99da8bfd1": "Configurez un agent pour commencer.",
-  "7da791b649c8a9e2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " collecte des données d’utilisation anonymes pour améliorer l’app. Pour vous désinscrire, consultez la ",
-    {
-      "t": "a",
-      "i": 2,
-      "c": "politique de confidentialité"
-    },
-    "."
-  ],
   "b33f35083757b42c": [
     "Consultez la",
     " ",
