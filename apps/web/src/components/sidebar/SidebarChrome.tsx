@@ -5,6 +5,7 @@ import {
   MessagesSquareIcon,
   SettingsIcon,
 } from "lucide-react";
+import type { EnvironmentId } from "@t3tools/contracts";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
 import { memo } from "react";
@@ -47,7 +48,8 @@ import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { useBoardEnvironments } from "~/components/board/useBoardEntry";
+import { needsYouBadgeText } from "~/components/board/boardEntry.logic";
+import { useBoardEnvironments, useBoardNeedsYouTotal } from "~/components/board/useBoardEntry";
 import { observeResize } from "~/lib/observeResize";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
@@ -230,6 +232,45 @@ function SidebarUtilityItem({
   );
 }
 
+/** Board, with how many board threads wait on the person; only this re-renders when it changes. */
+function SidebarBoardItem({
+  environmentIds,
+  onClick,
+}: {
+  environmentIds: ReadonlyArray<EnvironmentId>;
+  onClick: () => void;
+}) {
+  const gt = useGT();
+  const needsYou = useBoardNeedsYouTotal(environmentIds);
+  const badge = needsYouBadgeText(needsYou);
+  return (
+    <SidebarUtilityItem
+      icon={
+        <span className="relative grid size-4 place-items-center">
+          <MessagesSquareIcon className="size-4" />
+          {badge === null ? null : (
+            <span
+              className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-4xs font-semibold leading-none tabular-nums text-background ring-2 ring-sidebar"
+              aria-hidden
+            >
+              {badge}
+            </span>
+          )}
+        </span>
+      }
+      label={
+        badge === null
+          ? gt("Board", { $context: "sidebar button that opens rstack-board" })
+          : gt("Board, {count, plural, one {{count} needs you} other {{count} need you}}", {
+              count: needsYou,
+              $context: "sidebar button that opens rstack-board, with board threads waiting on you",
+            })
+      }
+      onClick={onClick}
+    />
+  );
+}
+
 const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
@@ -240,7 +281,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
-  const boardAvailable = useBoardEnvironments().length > 0;
+  const boardEnvironmentIds = useBoardEnvironments().map(
+    (environment) => environment.environmentId,
+  );
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -306,10 +349,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               onClick={handleIssuesClick}
             />
           ) : null}
-          {boardAvailable ? (
-            <SidebarUtilityItem
-              icon={<MessagesSquareIcon />}
-              label={gt("Board", { $context: "sidebar button that opens rstack-board" })}
+          {boardEnvironmentIds.length > 0 ? (
+            <SidebarBoardItem
+              environmentIds={boardEnvironmentIds}
               onClick={() => {
                 closeMobileSidebar();
                 void navigate({ to: "/board" });

@@ -30,6 +30,13 @@ export const BoardStatus = Schema.Struct({
 });
 export type BoardStatus = typeof BoardStatus.Type;
 
+/**
+ * Board threads waiting on the person: those carrying a `needs` label, as the board's own "needs
+ * you" view counts them. `null` while the board is not connected.
+ */
+export const BoardNeedsYou = Schema.Struct({ needsYou: Schema.NullOr(Schema.Number) });
+export type BoardNeedsYou = typeof BoardNeedsYou.Type;
+
 /** Starts the board's page on the server's machine when it is not running. */
 export const BOARD_OPEN_COMMAND = "rstack-board open --no-open";
 

@@ -8,7 +8,9 @@ import {
   boardSearchFromUrl,
   boardUrlWithTheme,
   chooseBoardEnvironment,
+  needsYouBadgeText,
   openOnBoardVisible,
+  totalNeedsYou,
 } from "./boardEntry.logic";
 
 const local = "local" as EnvironmentId;
@@ -34,6 +36,23 @@ describe("boardEnvironmentIds", () => {
         { environmentId: laptop, connected: false, boardEnabled: true },
       ]),
     ).toEqual([devbox]);
+  });
+});
+
+describe("needs you", () => {
+  it("sums the environments that report a count, and has none when none does", () => {
+    expect(totalNeedsYou([2, null, 3])).toBe(5);
+    expect(totalNeedsYou([0, null])).toBe(0);
+    expect(totalNeedsYou([null, null])).toBeNull();
+    expect(totalNeedsYou([])).toBeNull();
+  });
+
+  it("hides the badge at 0 and caps it at 99+", () => {
+    expect(needsYouBadgeText(null)).toBeNull();
+    expect(needsYouBadgeText(0)).toBeNull();
+    expect(needsYouBadgeText(5)).toBe("5");
+    expect(needsYouBadgeText(99)).toBe("99");
+    expect(needsYouBadgeText(100)).toBe("99+");
   });
 });
 

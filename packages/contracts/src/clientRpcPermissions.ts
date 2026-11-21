@@ -29,6 +29,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // The board's page writes as the person and its replies reach threads, as sending a message does.
   [WS_METHODS.boardStatus]: AuthOrchestrationOperateScope,
   [WS_METHODS.boardOpen]: AuthOrchestrationOperateScope,
+  [WS_METHODS.boardSubscribeNeedsYou]: AuthOrchestrationOperateScope,
   // Listing models spends the stored API key, so only those who can choose a model may.
   [WS_METHODS.serverListTextGeneratorModels]: AuthSettingsWriteScope,
   [WS_METHODS.serverRefreshProviders]: AuthOrchestrationReadScope,

@@ -108,6 +108,7 @@ import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as BoardBridge from "./board/BoardBridge.ts";
+import * as BoardNeedsYou from "./board/BoardNeedsYou.ts";
 import * as BoardReplyReactor from "./board/BoardReplyReactor.ts";
 import * as BoardService from "./board/BoardService.ts";
 import * as BoardStatusReactor from "./board/BoardStatusReactor.ts";
@@ -752,6 +753,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
   Layer.provideMerge(SecretCheck.layer),
   Layer.provideMerge(SecretResolver.layer),
+  Layer.provideMerge(BoardNeedsYou.layer),
   // One board probe cache for Settings, /mcp and the turns that add board instructions.
   Layer.provideMerge(BoardService.layer.pipe(Layer.provide(ProcessRunner.layer))),
   // Above the settings it writes when a theme is applied.

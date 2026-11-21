@@ -262,6 +262,7 @@ import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReact
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as OtlpEndpointCheck from "./observability/OtlpEndpointCheck.ts";
 import * as BoardBridge from "./board/BoardBridge.ts";
+import * as BoardNeedsYou from "./board/BoardNeedsYou.ts";
 import * as BoardService from "./board/BoardService.ts";
 import * as TextGenerators from "./textGeneration/TextGenerators.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
@@ -1587,6 +1588,7 @@ export const layerWsRpc = (
       const otlpEndpointCheck = yield* OtlpEndpointCheck.OtlpEndpointCheck;
       const board = yield* BoardService.BoardService;
       const boardBridge = yield* BoardBridge.BoardBridge;
+      const boardNeedsYou = yield* BoardNeedsYou.BoardNeedsYou;
       const textGenerators = yield* TextGenerators.TextGenerators;
       const sourceControlRepositories =
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
@@ -2762,6 +2764,8 @@ export const layerWsRpc = (
             Effect.map((url) => ({ url })),
             Effect.mapError((error) => new BoardOpenError({ message: error.message })),
           ),
+        [WS_METHODS.boardSubscribeNeedsYou]: () =>
+          boardNeedsYou.changes.pipe(Stream.map((needsYou) => ({ needsYou }))),
         [WS_METHODS.serverListTextGeneratorModels]: (input) => textGenerators.listModels(input),
         [WS_METHODS.serverPrepareTriage]: (input) => triage.prepare(input),
         [WS_METHODS.serverSignalProcess]: (input) => processDiagnostics.signal(input),

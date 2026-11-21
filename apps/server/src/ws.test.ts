@@ -97,6 +97,7 @@ import * as ModelManifest from "./provider/ModelManifest.ts";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as OtlpEndpointCheck from "./observability/OtlpEndpointCheck.ts";
 import * as BoardBridge from "./board/BoardBridge.ts";
+import * as BoardNeedsYou from "./board/BoardNeedsYou.ts";
 import * as BoardService from "./board/BoardService.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as RpcAuthorization from "./auth/RpcAuthorization.ts";
@@ -880,6 +881,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(OtlpEndpointCheck.OtlpEndpointCheck)({}),
   Layer.mock(BoardService.BoardService)({}),
   Layer.mock(BoardBridge.BoardBridge)({}),
+  Layer.mock(BoardNeedsYou.BoardNeedsYou)({}),
   Layer.mock(PairingGrantStore.PairingGrantStore)({}),
   Layer.mock(PeerLinks.PeerLinks)({}),
   Layer.mock(PeerLinkRequests.PeerLinkRequests)({}),

@@ -24,6 +24,11 @@ footer or **Open board** in the command palette; both appear while any
 connected environment has the board connected. **Open on board** in a
 coordinator thread's menu opens the page at that coordinator's channels.
 
+The **Board** button shows how many board threads need you: those the board
+lists under "needs you", with a `needs` label you have not answered yet, summed
+over your environments. The page header and its environment picker show the
+same count per environment.
+
 The page shows the board's own web page, following the app's light or dark
 appearance. When more than one environment has the board, pick one at the top;
 the app remembers your choice on this device, and otherwise starts with the

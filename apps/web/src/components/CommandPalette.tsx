@@ -260,7 +260,7 @@ import {
   PORT_FORWARD_GROUP_PREFIX,
   useCommandPalettePortForwardItem,
 } from "./CommandPalettePortForwardItems";
-import { useBoardEnvironments } from "./board/useBoardEntry";
+import { useBoardEnvironments, useBoardNeedsYouTotal } from "./board/useBoardEntry";
 import {
   CommandPaletteVirtualizedResults,
   scrollCommandPaletteRowIntoView,
@@ -558,7 +558,10 @@ function OpenCommandPaletteDialog(props: {
     activeThread: activeThread ?? null,
     query: deferredQuery,
   });
-  const boardAvailable = useBoardEnvironments().length > 0;
+  const boardEnvironmentIds = useBoardEnvironments().map(
+    (environment) => environment.environmentId,
+  );
+  const boardNeedsYou = useBoardNeedsYouTotal(boardEnvironmentIds);
   const currentView = viewStack.at(-1)?.view ?? null;
   const threadSearchQuery = currentView === null && !isActionsOnly ? deferredQuery : "";
   const [browseGeneration, setBrowseGeneration] = useState(0);
@@ -1554,12 +1557,20 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  if (boardAvailable) {
+  if (boardEnvironmentIds.length > 0) {
     actionItems.push({
       kind: "action",
       value: "action:open-board",
       searchTerms: ["board", "rstack-board", "check in", "status", "workers", "needs you"],
       title: gt("Open board"),
+      ...(boardNeedsYou !== null && boardNeedsYou > 0
+        ? {
+            description: gt("{count, plural, one {{count} needs you} other {{count} need you}}", {
+              count: boardNeedsYou,
+              $context: "board threads waiting on you",
+            }),
+          }
+        : {}),
       icon: <MessagesSquareIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
         await navigate({ to: "/board" });

@@ -50,7 +50,7 @@ import {
   boardUrlWithTheme,
   chooseBoardEnvironment,
 } from "./boardEntry.logic";
-import { useBoardEnvironments } from "./useBoardEntry";
+import { useBoardEnvironments, useBoardNeedsYou } from "./useBoardEntry";
 
 const STORAGE_KEY = "t3.board.environment";
 
@@ -159,6 +159,22 @@ function BoardEmpty(props: {
       </EmptyHeader>
       {props.children ? <EmptyContent>{props.children}</EmptyContent> : null}
     </Empty>
+  );
+}
+
+/** ` · 3 need you` after a status or an environment's name, while any board thread waits. */
+function BoardNeedsYouCount(props: { readonly environmentId: EnvironmentId }) {
+  const gt = useGT();
+  const needsYou = useBoardNeedsYou(props.environmentId);
+  if (needsYou === null || needsYou <= 0) return null;
+  return (
+    <span className="text-muted-foreground">
+      {" · "}
+      {gt("{count, plural, one {{count} needs you} other {{count} need you}}", {
+        count: needsYou,
+        $context: "board threads waiting on you",
+      })}
+    </span>
   );
 }
 
@@ -281,6 +297,7 @@ function BoardView(props: {
                 {props.environments.map((option) => (
                   <SelectItem key={option.environmentId} value={option.environmentId}>
                     {option.label}
+                    <BoardNeedsYouCount environmentId={option.environmentId} />
                   </SelectItem>
                 ))}
               </SelectPopup>
@@ -289,6 +306,7 @@ function BoardView(props: {
         ) : null}
         <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
           {canOpen ? statusText : null}
+          {canOpen ? <BoardNeedsYouCount environmentId={environmentId} /> : null}
         </span>
         <div
           className="flex items-center gap-1 [-webkit-app-region:no-drag]"

@@ -93,6 +93,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.serverCheckOtlpEndpoint]: "server",
   [WS_METHODS.boardStatus]: "board",
   [WS_METHODS.boardOpen]: "board",
+  [WS_METHODS.boardSubscribeNeedsYou]: "board",
   [WS_METHODS.serverListTextGeneratorModels]: "server",
   [WS_METHODS.serverPrepareTriage]: "server",
   [WS_METHODS.serverGetUsageSummary]: "server",

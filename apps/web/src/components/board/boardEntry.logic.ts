@@ -28,6 +28,18 @@ export function boardEnvironmentIds(
     .map((candidate) => candidate.environmentId);
 }
 
+/** Threads waiting on the person over these environments; `null` when none reports a count. */
+export function totalNeedsYou(counts: ReadonlyArray<number | null>): number | null {
+  const known = counts.filter((count) => count !== null);
+  return known.length === 0 ? null : known.reduce((sum, count) => sum + count, 0);
+}
+
+/** The footer badge's text: none at 0 or without a count, capped at 99+. */
+export function needsYouBadgeText(count: number | null): string | null {
+  if (count === null || count <= 0) return null;
+  return count > 99 ? "99+" : String(count);
+}
+
 /**
  * The environment whose board the page shows: the one a link asked for, else the one this device
  * chose last, else the last open thread's, else the first. Each only while it has the board.

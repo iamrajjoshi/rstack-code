@@ -1909,6 +1909,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:board:open",
       tag: WS_METHODS.boardOpen,
     }),
+    boardNeedsYou: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:board:needs-you",
+      tag: WS_METHODS.boardSubscribeNeedsYou,
+    }),
     listTextGeneratorModels: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:list-text-generator-models",
       tag: WS_METHODS.serverListTextGeneratorModels,
