@@ -177,8 +177,7 @@ function BoardView(props: {
   const appearance = useRenderedAppearance();
   const environment = useEnvironment(environmentId);
   const canOpen = useAtomValue(serverEnvironment.boardOpen.permissionAtom(environmentId));
-  const canForward =
-    environment?.connection.phase === "connected" && canForwardPorts(environment.entry.target);
+  const canForward = environment?.connection.phase === "connected" && canForwardPorts(environment);
   const locality = useForwardLocality(canForward ? environmentId : null);
   const embed = boardEmbed({
     canForward,
