@@ -208,8 +208,6 @@ attention** (label `rstack-sync`), lists the range, each conflicted file with th
 that touch it, failing checks, and the commands to finish. Later runs update that issue, and the
 first sync that succeeds closes it. To finish by hand:
 
-> > > > > > > theirs
-
 ```bash
 git switch main && git pull --ff-only
 node scripts/rstack-sync-upstream.ts merge --ref <upstream sha>   # same rules; stops at real conflicts
