@@ -1,5 +1,9 @@
 import { useGT } from "gt-react";
+<<<<<<< HEAD
 import { FolderPlusIcon, ListPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+=======
+import { SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+>>>>>>> 9ec2d4b0679c533fe685ca9725cb3c426d56d37e
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -16,7 +20,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   projectScope: ReactNode;
-  onNewProject: () => void;
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
@@ -37,7 +40,6 @@ export interface SidebarThreadHeaderProps {
 export function SidebarThreadHeader({
   hasProjects,
   projectScope,
-  onNewProject,
   onNewThread,
   newThreadDisabled,
   newThreadShortcutLabel,
@@ -102,6 +104,7 @@ export function SidebarThreadHeader({
         ) : null}
       </div>
       <div className="flex shrink-0 items-center">
+<<<<<<< HEAD
         {hasProjects ? (
           <>
             {projectScope}
@@ -115,6 +118,9 @@ export function SidebarThreadHeader({
             <ListPlusIcon />
           </SidebarHeaderIconButton>
         ) : null}
+=======
+        {hasProjects ? projectScope : null}
+>>>>>>> 9ec2d4b0679c533fe685ca9725cb3c426d56d37e
         <SidebarHeaderIconButton
           label={gt("New thread")}
           tooltip={
