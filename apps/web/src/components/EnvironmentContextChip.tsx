@@ -5,8 +5,12 @@ import { useGT } from "gt-react";
 import { useEnvironment } from "~/state/environments";
 import { ContextChip, ContextChipLabel } from "./ContextChip";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+<<<<<<< HEAD
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { APP_BASE_NAME } from "~/branding";
+=======
+import { SharedTooltipTrigger } from "./ui/shared-tooltip";
+>>>>>>> 84fe59bb3b6bb7ddd0a4683d902812cb74a81665
 
 /**
  * Inline chip for a mentioned machine, in the composer and in sent messages. Prefers the
@@ -20,6 +24,7 @@ export function EnvironmentContextChip(props: {
   const environment = useEnvironment(props.record.environmentId);
   const label = environment?.label.trim() || props.record.label;
   return (
+<<<<<<< HEAD
     <Tooltip>
       <TooltipTrigger
         render={
@@ -42,5 +47,23 @@ export function EnvironmentContextChip(props: {
           : gt("Machine not in this app")}
       </TooltipPopup>
     </Tooltip>
+=======
+    <SharedTooltipTrigger
+      render={
+        <ContextChip
+          kind="environment"
+          tabIndex={0}
+          aria-label={gt("Machine, {label}", { label })}
+          data-markdown-copy={props.copyMarkdown}
+        >
+          <EnvironmentMachineIcon
+            kind={resolveEnvironmentMachineKind(environment?.serverConfig ?? null)}
+          />
+          <ContextChipLabel>{label}</ContextChipLabel>
+        </ContextChip>
+      }
+      label={environment ? gt("T3 Code environment") : gt("Machine not in this app")}
+    />
+>>>>>>> 84fe59bb3b6bb7ddd0a4683d902812cb74a81665
   );
 }

@@ -111,9 +111,12 @@ import {
   useActiveBrowserRecordingTabIds,
 } from "~/browser/browserRecording";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { observeResize } from "~/lib/observeResize";
+<<<<<<< HEAD
 import { APP_BASE_NAME } from "~/branding";
+=======
+import { SharedTooltipTrigger } from "~/components/ui/shared-tooltip";
+>>>>>>> 84fe59bb3b6bb7ddd0a4683d902812cb74a81665
 
 interface Props {
   threadRef: ScopedThreadRef;
@@ -1040,12 +1043,12 @@ export function PreviewView({
         }
         leadingActions={
           activeProfileId !== browserDefaults.profileId ? (
-            <Tooltip>
-              <TooltipTrigger render={<Badge variant="outline" className="max-w-28 shrink-0" />}>
-                <span className="truncate">{activeProfileName}</span>
-              </TooltipTrigger>
-              <TooltipPopup side="top">{activeProfileName}</TooltipPopup>
-            </Tooltip>
+            <SharedTooltipTrigger
+              render={<Badge variant="outline" className="max-w-28 shrink-0" />}
+              label={activeProfileName}
+            >
+              <span className="truncate">{activeProfileName}</span>
+            </SharedTooltipTrigger>
           ) : null
         }
         trailingActions={

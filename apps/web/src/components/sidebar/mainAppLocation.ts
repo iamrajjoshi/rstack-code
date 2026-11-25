@@ -14,7 +14,11 @@ export function isSidebarUtilityPage(pathname: string) {
     pathname.startsWith("/projects/") ||
     pathname === "/pull-requests" ||
     pathname === "/issues" ||
+<<<<<<< HEAD
     pathname === "/board"
+=======
+    pathname === "/workflows"
+>>>>>>> 84fe59bb3b6bb7ddd0a4683d902812cb74a81665
   );
 }
 
