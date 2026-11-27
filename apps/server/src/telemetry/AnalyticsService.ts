@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 // The configured PostHog ingest retains events; UUIDs deduplicate retries there.
+=======
+// T3 ingest retains events and deduplicates retries by UUID.
+>>>>>>> ee99fee188b9097a574ad805e004e10871e9b083
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { isCiEnvironment, isDoNotTrackSet } from "@t3tools/shared/otelEnvironment";
 import type { ClientOs } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
@@ -29,6 +34,8 @@ interface BufferedAnalyticsEvent {
   readonly event: string;
   readonly properties?: Readonly<Record<string, unknown>>;
   readonly capturedAt: string;
+  /** Sent under its own id, without the install id, so it links to nothing else. */
+  readonly anonymous?: true;
 }
 
 interface DeliveryState {
@@ -67,9 +74,19 @@ function retryDelayMs(failures: number, random: number): number {
 // rstack-code: analytics stay off unless the user opts in and supplies their own PostHog key
 // and host; upstream's ingest is never a default.
 const TelemetryEnvConfig = Config.all({
+<<<<<<< HEAD
   posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(Config.option),
   posthogHost: Config.String("T3CODE_POSTHOG_HOST").pipe(Config.option),
   enabled: Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(false)),
+=======
+  ingestKey: Config.String("T3CODE_TELEMETRY_KEY").pipe(
+    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
+  ),
+  ingestHost: Config.String("T3CODE_TELEMETRY_HOST").pipe(
+    Config.withDefault("https://ingest.t3.codes"),
+  ),
+  enabled: Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.option),
+>>>>>>> ee99fee188b9097a574ad805e004e10871e9b083
   flushBatchSize: Config.Number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
   maxBufferedEvents: Config.Number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
     Config.withDefault(1_000),
@@ -77,13 +94,40 @@ const TelemetryEnvConfig = Config.all({
   wslDistroName: Config.String("WSL_DISTRO_NAME").pipe(Config.option),
 });
 
+// Users name or import their own distros, so only well-known families are reported.
+const WSL_DISTRO_FAMILIES = [
+  ["ubuntu", "Ubuntu"],
+  ["debian", "Debian"],
+  ["kali", "Kali"],
+  ["opensuse", "openSUSE"],
+  ["suse", "SUSE"],
+  ["sles", "SUSE"],
+  ["oraclelinux", "OracleLinux"],
+  ["almalinux", "AlmaLinux"],
+  ["rockylinux", "RockyLinux"],
+  ["fedora", "Fedora"],
+  ["archlinux", "Arch"],
+  ["alpine", "Alpine"],
+  ["nixos", "NixOS"],
+  ["pengwin", "Pengwin"],
+  ["docker-desktop", "docker-desktop"],
+] as const;
+
+export const wslDistroFamily = (distroName: string): string | undefined => {
+  const name = distroName.trim().toLowerCase();
+  if (name === "") return undefined;
+  return WSL_DISTRO_FAMILIES.find(([prefix]) => name.startsWith(prefix))?.[1] ?? "other";
+};
+
 export class AnalyticsService extends Context.Service<
   AnalyticsService,
   {
+    /** Whether the event was queued to send; false when telemetry is off. */
     readonly record: (
       event: string,
       properties?: Readonly<Record<string, unknown>>,
-    ) => Effect.Effect<void>;
+      options?: { readonly anonymous?: boolean },
+    ) => Effect.Effect<boolean>;
 
     readonly flush: Effect.Effect<void>;
 
@@ -120,11 +164,14 @@ export const make = Effect.gen(function* () {
   const telemetryConfig = yield* TelemetryEnvConfig;
   const hostEnvironment = yield* HostProcess.Environment;
   const awaitingShellConsent = hostEnvironment.T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING === "1";
+  const enabledByDefault = !isCiEnvironment(hostEnvironment);
+  const enabledAtStartup = Option.getOrElse(telemetryConfig.enabled, () => enabledByDefault);
   // A managed policy can switch analytics off over the environment, never on.
   const policyAllows =
     ManagedPolicy.deniedBy(yield* ManagedPolicy.ManagedPolicy, "telemetry") === undefined;
   // A cached PATH does not establish consent from the current login shell.
   const telemetryEnabled = Effect.suspend(() => {
+<<<<<<< HEAD
     if (
       !telemetryConfig.enabled ||
       !policyAllows ||
@@ -133,12 +180,20 @@ export const make = Effect.gen(function* () {
     ) {
       return Effect.succeed(false);
     }
+=======
+    if (!enabledAtStartup || !policyAllows || isDoNotTrackSet(hostEnvironment))
+      return Effect.succeed(false);
+>>>>>>> ee99fee188b9097a574ad805e004e10871e9b083
     if (!awaitingShellConsent) return Effect.succeed(true);
     if (hostEnvironment.T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING === "1")
       return Effect.succeed(false);
     const preference = hostEnvironment.T3CODE_TELEMETRY_ENABLED;
     return Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(
+<<<<<<< HEAD
       Config.withDefault(false),
+=======
+      Config.withDefault(enabledByDefault),
+>>>>>>> ee99fee188b9097a574ad805e004e10871e9b083
       Effect.provideService(
         ConfigProvider.ConfigProvider,
         ConfigProvider.fromEnv({
@@ -168,11 +223,15 @@ export const make = Effect.gen(function* () {
   const clientType = serverConfig.mode === "desktop" ? "desktop-app" : "cli-web-client";
   const hostPlatform = yield* HostProcess.Platform;
   const hostArchitecture = yield* HostProcess.Architecture;
+  const wslDistro = Option.getOrUndefined(
+    Option.flatMapNullishOr(telemetryConfig.wslDistroName, wslDistroFamily),
+  );
 
   const enqueueBufferedEvent = (
     uuid: string,
     event: string,
-    properties?: Readonly<Record<string, unknown>>,
+    properties: Readonly<Record<string, unknown>> | undefined,
+    anonymous: boolean,
   ) =>
     Effect.flatMap(DateTime.now, (now) =>
       Ref.modify(bufferRef, (current) => {
@@ -183,6 +242,7 @@ export const make = Effect.gen(function* () {
             event,
             ...(properties ? { properties } : {}),
             capturedAt: DateTime.formatIso(now),
+            ...(anonymous ? { anonymous: true as const } : {}),
           } satisfies BufferedAnalyticsEvent,
         ];
 
@@ -210,32 +270,47 @@ export const make = Effect.gen(function* () {
     }
 
     const payload = {
+<<<<<<< HEAD
       api_key: telemetryConfig.posthogKey.value,
+=======
+      api_key: telemetryConfig.ingestKey,
+>>>>>>> ee99fee188b9097a574ad805e004e10871e9b083
       batch: events.map((event) => ({
         uuid: event.uuid,
         event: event.event,
-        distinct_id: distinctId,
-        properties: {
-          ...event.properties,
-          ...(installId === null ? {} : { installId }),
-          $process_person_profile: false,
-          platform: hostPlatform,
-          wsl: Option.getOrUndefined(telemetryConfig.wslDistroName),
-          arch: hostArchitecture,
-          t3CodeVersion: packageJson.version,
-          telemetryChannel: ServerConfig.telemetryChannel,
-          clientType,
-          serverOs: serverOsFromNodePlatform(hostPlatform),
-          serverArch: hostArchitecture,
-          serverWslDistro: Option.getOrUndefined(telemetryConfig.wslDistroName),
-          serverAppVersion: packageJson.version,
-          serverMode: serverConfig.mode,
-        },
+        distinct_id: event.anonymous ? event.uuid : distinctId,
+        properties: event.anonymous
+          ? {
+              ...event.properties,
+              $process_person_profile: false,
+              t3CodeVersion: packageJson.version,
+              telemetryChannel: ServerConfig.telemetryChannel,
+            }
+          : {
+              ...event.properties,
+              ...(installId === null ? {} : { installId }),
+              $process_person_profile: false,
+              platform: hostPlatform,
+              wsl: wslDistro,
+              arch: hostArchitecture,
+              t3CodeVersion: packageJson.version,
+              telemetryChannel: ServerConfig.telemetryChannel,
+              clientType,
+              serverOs: serverOsFromNodePlatform(hostPlatform),
+              serverArch: hostArchitecture,
+              serverWslDistro: wslDistro,
+              serverAppVersion: packageJson.version,
+              serverMode: serverConfig.mode,
+            },
         timestamp: event.capturedAt,
       })),
     };
 
+<<<<<<< HEAD
     yield* HttpClientRequest.post(`${telemetryConfig.posthogHost.value}/batch/`).pipe(
+=======
+    yield* HttpClientRequest.post(`${telemetryConfig.ingestHost}/batch/`).pipe(
+>>>>>>> ee99fee188b9097a574ad805e004e10871e9b083
       HttpClientRequest.bodyJson(payload),
       Effect.flatMap(httpClient.execute),
       Effect.flatMap(HttpClientResponse.filterStatusOk),
@@ -243,9 +318,13 @@ export const make = Effect.gen(function* () {
     );
   });
 
+  // An anonymous event goes out alone, or the ingest could link it to the other events by request.
   const takeBatch = Ref.modify(bufferRef, (current) => {
-    const nextBatch = current.slice(0, telemetryConfig.flushBatchSize);
-    return [nextBatch, current.slice(nextBatch.length)] as const;
+    const next = current.findIndex((event) => event.anonymous);
+    if (next === 0) return [current.slice(0, 1), current.slice(1)] as const;
+    const linked = current.slice(0, next === -1 ? current.length : next);
+    const batch = linked.slice(0, telemetryConfig.flushBatchSize);
+    return [batch, current.slice(batch.length)] as const;
   });
 
   // Back off even after dropping rejected batches so bad API keys cannot drain the queue in a tight loop.
@@ -318,20 +397,26 @@ export const make = Effect.gen(function* () {
   });
 
   const record: AnalyticsService["Service"]["record"] = Effect.fn("AnalyticsService.record")(
-    function* (event, properties) {
-      if (!(yield* telemetryEnabled) || !distinctId) return;
+    function* (event, properties, options) {
+      if (!(yield* telemetryEnabled) || !distinctId) return false;
 
       // Catch Node UUID defects too; best-effort telemetry drops events without UUIDs.
       const uuid = yield* Effect.exit(crypto.uuidV7());
-      if (Exit.isFailure(uuid)) return;
+      if (Exit.isFailure(uuid)) return false;
 
-      const enqueueResult = yield* enqueueBufferedEvent(uuid.value, event, properties);
+      const enqueueResult = yield* enqueueBufferedEvent(
+        uuid.value,
+        event,
+        properties,
+        options?.anonymous === true,
+      );
       if (enqueueResult.dropped) {
         yield* Effect.logDebug("analytics buffer full; dropping oldest event", {
           size: enqueueResult.size,
           event,
         });
       }
+      return true;
     },
   );
 
