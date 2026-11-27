@@ -22,6 +22,7 @@ import * as ProcessRunner from "../processRunner.ts";
 import { serviceLauncherLockPath } from "../serviceLauncher.ts";
 import * as BootService from "./bootService.ts";
 import { pinnedRuntimePaths } from "./pinnedRuntime.ts";
+import { RESTORE_OOMD_WATCH_SCRIPT } from "./userManagerOom.ts";
 import {
   decodeServiceUnit,
   disabledServiceTask,
@@ -51,6 +52,8 @@ vi.mock("node:fs", async (importOriginal) => {
     },
   };
 });
+
+const SCHTASKS = "D:\\WinNT\\System32\\schtasks.exe";
 
 const windowsTaskOptions = {
   userId: "PC\\theo",
@@ -250,13 +253,13 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         command === "systemctl --user disable --now rstack-code.service" ||
         command === "systemctl --user restart --no-block rstack-code.service" ||
         command.startsWith("launchctl bootout --wait ") ||
-        (input.command === "schtasks" && input.args[0] === "/End")
+        (input.command === SCHTASKS && input.args[0] === "/End")
       ) {
         markersAtStop.push(yield* fs.exists(marker));
       }
       if (
         command === "systemctl --user daemon-reload" ||
-        (input.command === "schtasks" && input.args[0] === "/Create")
+        (input.command === SCHTASKS && input.args[0] === "/Create")
       ) {
         markersAtPreparation.push(yield* fs.exists(marker));
       }
@@ -274,11 +277,21 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         control.linger = "yes";
         control.managerReachable ||= control.lingerStartsManager;
       }
+<<<<<<< HEAD
       if (!failed && command === "systemctl --user enable rstack-code.service")
         control.enabled = true;
+=======
+      if (
+        !failed &&
+        (command === "systemctl --user enable t3code.service" ||
+          command.startsWith("launchctl enable "))
+      ) {
+        control.enabled = true;
+      }
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       const taskMissing =
-        input.command === "schtasks" && input.args[0] !== "/Create" && control.task === undefined;
-      if (input.command === "schtasks" && !failed) {
+        input.command === SCHTASKS && input.args[0] !== "/Create" && control.task === undefined;
+      if (input.command === SCHTASKS && !failed) {
         if (input.args[0] === "/Create") {
           const xml = decodeServiceUnit(yield* fs.readFile(input.args[2] ?? ""));
           control.task = { xml, enabled: !serviceTaskIsDisabled(xml) };
@@ -289,14 +302,29 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         if (input.args[0] === "/Delete") delete control.task;
         if (input.args[0] === "/End") control.launcher?.close();
       }
-      if (!refusedStart && !failed && command.startsWith("systemctl --user restart "))
+      if (
+        !refusedStart &&
+        !failed &&
+        (command.startsWith("systemctl --user restart ") ||
+          command.startsWith("launchctl bootstrap "))
+      ) {
         control.active = true;
+      }
       // The manager loads units only from its own unit directory.
       const unitOutsideManager =
         command === "systemctl --user enable rstack-code.service" &&
         !(yield* fs.exists(path.join(managerUnitDir, "rstack-code.service")));
       // A timed-out stop may still stop the service.
+<<<<<<< HEAD
       if (command === "systemctl --user stop rstack-code.service") control.active = false;
+=======
+      if (
+        command === "systemctl --user stop t3code.service" ||
+        command.startsWith("launchctl bootout --wait ")
+      ) {
+        control.active = false;
+      }
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       if (
         control.stateAfterStop !== undefined &&
         (command === "systemctl --user stop rstack-code.service" ||
@@ -319,17 +347,19 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
               })
             : input.args[0] === "--version"
               ? `t3 v${/versions[\\/]([^\\/]+)[\\/]/.exec(input.command)?.[1] ?? "1.2.3"}\n`
-              : input.command === "schtasks" && input.args.includes("/XML")
+              : input.command === SCHTASKS && input.args.includes("/XML")
                 ? control.task?.enabled === false
                   ? disabledServiceTask(control.task.xml)
                   : (control.task?.xml ?? "")
                 : input.command === "loginctl" && input.args[0] === "show-user"
                   ? `${control.linger ?? ""}\n`
-                  : input.args[1] === "is-enabled"
-                    ? control.enabled
-                      ? "enabled\n"
-                      : "disabled\n"
-                    : "",
+                  : input.command === "launchctl" && input.args[0] === "print-disabled"
+                    ? `disabled services = {\n\t"${BootService.BOOT_SERVICE_LAUNCHD_LABEL}" => ${control.enabled ? "enabled" : "disabled"}\n}\n`
+                    : input.args[1] === "is-enabled"
+                      ? control.enabled
+                        ? "enabled\n"
+                        : "disabled\n"
+                      : "",
         stderr: "",
         code: ChildProcessSpawner.ExitCode(
           taskMissing && input.args.includes("/HRESULT")
@@ -344,6 +374,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
                   input.args[0] === "show-user" &&
                   control.linger === undefined) ||
                 (input.args[1] === "is-active" && !control.active) ||
+                (input.command === "launchctl" && input.args[0] === "print" && !control.active) ||
                 (input.args[1] === "is-enabled" && !control.enabled)
               ? 1
               : 0,
@@ -398,6 +429,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
                 USERPROFILE: home,
                 LOCALAPPDATA: path.join(home, "AppData", "Local"),
                 USERDOMAIN: "PC",
+                windir: "D:\\WinNT",
                 USERNAME: "theo",
                 ...(environmentPath === undefined || environmentPath === ""
                   ? {}
@@ -1309,6 +1341,28 @@ process.disconnect();
     }),
   );
 
+  it.effect("treats a symlinked T3 home path as the same home", () =>
+    Effect.gen(function* () {
+      const { service, fs, baseDir, commands, makeService } = yield* makeHarness();
+      yield* service.install();
+      const path = yield* Path.Path;
+      const linkDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-symlink-home-" });
+      const aliasDir = path.join(linkDir, "a$$b");
+      yield* fs.symlink(baseDir, aliasDir);
+
+      const alias = yield* makeService(undefined, "1.2.3", aliasDir);
+      expect(yield* alias.status).toMatchObject({ current: true });
+      expect((yield* alias.status).otherBaseDir).toBeUndefined();
+      expect(yield* alias.restart).toBe("restarted");
+      commands.length = 0;
+      yield* alias.withStopped(Effect.void);
+      expect(commands).toContain("systemctl --user stop t3code.service");
+      expect((yield* alias.install()).baseDir).toBe(aliasDir);
+      expect(yield* service.status).toMatchObject({ current: true });
+      expect((yield* service.status).otherBaseDir).toBeUndefined();
+    }),
+  );
+
   it.effect("hands the whole install to systemd without changing the running service", () =>
     Effect.gen(function* () {
       const { fs, commands, invocations, control, makeService } = yield* makeHarness();
@@ -1408,9 +1462,16 @@ process.disconnect();
         const outcome = yield* inside.restart;
         expect(commands).toEqual([
           "systemctl --user daemon-reload",
+<<<<<<< HEAD
           "systemctl --user enable rstack-code.service",
           "systemctl --user reset-failed rstack-code.service",
           "systemctl --user restart --no-block rstack-code.service",
+=======
+          `/bin/sh -c ${RESTORE_OOMD_WATCH_SCRIPT}`,
+          "systemctl --user enable t3code.service",
+          "systemctl --user reset-failed t3code.service",
+          "systemctl --user restart --no-block t3code.service",
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
         ]);
         expect(outcome).toBe("queued");
         expect(markersAtStop).toEqual([true, true, true]);
@@ -1499,7 +1560,7 @@ process.disconnect();
 
   it.effect("installs, reports current state, and uninstalls on macOS", () =>
     Effect.gen(function* () {
-      const { service, fs, statePath, commands, timeouts, runtime, markersAtStop } =
+      const { service, fs, statePath, commands, timeouts, runtime, markersAtStop, control } =
         yield* makeHarness("darwin");
       const path = yield* Path.Path;
       const plan = yield* service.install();
@@ -1522,6 +1583,13 @@ process.disconnect();
       expect(yield* service.status).toMatchObject({
         current: true,
         installedVersion: "1.2.3",
+        problems: [],
+      });
+      control.active = false;
+      control.enabled = false;
+      expect(yield* service.status).toMatchObject({
+        current: false,
+        problems: ["service-disabled", "service-stopped"],
       });
       const relayMarker = path.join(plan.baseDir, "runtime", DESKTOP_UPDATE_RESTART_MARKER_FILE);
       expect(yield* service.restart).toBe("restarted");
@@ -1565,9 +1633,15 @@ process.disconnect();
         protocol: SERVICE_LAUNCHER_PROTOCOL,
         activeVersion: "1.2.3",
       });
+<<<<<<< HEAD
       expect(commands.filter((command) => command.startsWith("schtasks "))).toEqual([
         `schtasks /Create /XML ${plan.unitPath} /TN rstack-code-PC-theo /F`,
         "schtasks /Run /TN rstack-code-PC-theo",
+=======
+      expect(commands.filter((command) => command.startsWith(`${SCHTASKS} `))).toEqual([
+        `${SCHTASKS} /Create /XML ${plan.unitPath} /TN t3code-PC-theo /F`,
+        `${SCHTASKS} /Run /TN t3code-PC-theo`,
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       ]);
       // No launcher holds the lock here.
       expect(yield* service.status).toMatchObject({
@@ -1577,7 +1651,11 @@ process.disconnect();
       });
 
       // A task that Task Scheduler refuses to delete stays installed, so a retry finds it.
+<<<<<<< HEAD
       control.failCommand = "schtasks /Delete /TN rstack-code-PC-theo /F";
+=======
+      control.failCommand = `${SCHTASKS} /Delete /TN t3code-PC-theo /F`;
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       expect((yield* service.uninstall.pipe(Effect.flip))._tag).toBe("BootServiceCommandError");
       expect((yield* service.status).installed).toBe(true);
       control.failCommand = undefined;
@@ -1585,9 +1663,15 @@ process.disconnect();
       commands.length = 0;
       expect(yield* service.uninstall).toBe(true);
       expect(commands).toEqual([
+<<<<<<< HEAD
         "schtasks /Change /TN rstack-code-PC-theo /DISABLE",
         "schtasks /End /TN rstack-code-PC-theo",
         "schtasks /Delete /TN rstack-code-PC-theo /F",
+=======
+        `${SCHTASKS} /Change /TN t3code-PC-theo /DISABLE`,
+        `${SCHTASKS} /End /TN t3code-PC-theo`,
+        `${SCHTASKS} /Delete /TN t3code-PC-theo /F`,
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       ]);
       expect(control.task).toBeUndefined();
       expect((yield* service.status).installed).toBe(false);
@@ -1627,11 +1711,19 @@ process.disconnect();
       commands.length = 0;
       yield* service.withStopped(Effect.sync(() => commands.push("repair")));
       expect(commands.filter((command) => !command.includes("/Query"))).toEqual([
+<<<<<<< HEAD
         "schtasks /Change /TN rstack-code-PC-theo /DISABLE",
         "schtasks /End /TN rstack-code-PC-theo",
         "repair",
         "schtasks /Change /TN rstack-code-PC-theo /ENABLE",
         "schtasks /Run /TN rstack-code-PC-theo",
+=======
+        `${SCHTASKS} /Change /TN t3code-PC-theo /DISABLE`,
+        `${SCHTASKS} /End /TN t3code-PC-theo`,
+        "repair",
+        `${SCHTASKS} /Change /TN t3code-PC-theo /ENABLE`,
+        `${SCHTASKS} /Run /TN t3code-PC-theo`,
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       ]);
     }),
   );
@@ -1652,14 +1744,20 @@ process.disconnect();
       const inside = yield* makeService(undefined, "1.2.4", undefined, true);
       const relayMarker = `${plan.baseDir}/runtime/${DESKTOP_UPDATE_RESTART_MARKER_FILE}`;
       const handoff = [
+<<<<<<< HEAD
         `schtasks /Create /XML ${plan.unitPath} /TN rstack-code-PC-theo /F`,
         "schtasks /End /TN rstack-code-PC-theo",
         "schtasks /Run /TN rstack-code-PC-theo",
+=======
+        `${SCHTASKS} /Create /XML ${plan.unitPath} /TN t3code-PC-theo /F`,
+        `${SCHTASKS} /End /TN t3code-PC-theo`,
+        `${SCHTASKS} /Run /TN t3code-PC-theo`,
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
       ];
       commands.length = 0;
 
       expect(yield* inside.install()).toMatchObject({ handedOff: true, logPath: plan.logPath });
-      expect(commands.filter((command) => command.startsWith("schtasks "))).toEqual(handoff);
+      expect(commands.filter((command) => command.startsWith(`${SCHTASKS} `))).toEqual(handoff);
       expect(parseServiceState(yield* fs.readFileString(statePath))?.activeVersion).toBe("1.2.4");
       expect(
         yield* fs.readFileString(`${plan.baseDir}/runtime/${SERVICE_RESTART_PENDING_FILE}`),
@@ -1783,7 +1881,7 @@ process.disconnect();
       expect((yield* service.install().pipe(Effect.flip))._tag).toBe("BootServiceCommandError");
       expect(yield* service.status).toMatchObject({
         current: false,
-        problems: ["restart-pending"],
+        problems: ["service-stopped", "restart-pending"],
       });
       expect(yield* fs.readFileString(markerPath)).toBe("1.2.3\n");
 

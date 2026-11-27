@@ -44,8 +44,12 @@ import { manualServerUpdateCommand } from "~/versionSkew";
 import { crossesReleaseTrack } from "@t3tools/shared/cliRelease";
 import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
+<<<<<<< HEAD
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { APP_BASE_NAME } from "~/branding";
+=======
+import { SharedTooltipTrigger } from "./ui/shared-tooltip";
+>>>>>>> 186f6aac5740f2662e6fa2e2d4a66ad39caa6410
 
 const UPDATE_STAGE_LABELS: Record<ServerUpdateStage, string> = {
   downloading: msg("Downloading…"),
@@ -270,14 +274,12 @@ export function ServerUpdateProgress({
     return (
       <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-destructive" role="alert">
         <span className="size-1.5 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span className="min-w-0 truncate">{serverUpdateFailureText(state, messages)}</span>
-            }
-          />
-          <TooltipPopup side="top">{serverUpdateFailureText(state, messages)}</TooltipPopup>
-        </Tooltip>
+        <SharedTooltipTrigger
+          render={
+            <span className="min-w-0 truncate">{serverUpdateFailureText(state, messages)}</span>
+          }
+          label={serverUpdateFailureText(state, messages)}
+        />
       </div>
     );
   }
@@ -440,23 +442,21 @@ export function ServerUpdateAction({
 
   if (appearance === "icon") {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              size="icon-xs"
-              variant="ghost-muted"
-              className={className}
-              aria-label={gt("{action} for {serverLabel}", { action: actionLabel, serverLabel })}
-              disabled={manualCommand === null && !canUpdate}
-              onClick={onClick}
-            />
-          }
-        >
-          <CircleArrowUpIcon className="size-3.5" />
-        </TooltipTrigger>
-        <TooltipPopup side="top">{actionLabel}</TooltipPopup>
-      </Tooltip>
+      <SharedTooltipTrigger
+        render={
+          <Button
+            size="icon-xs"
+            variant="ghost-muted"
+            className={className}
+            aria-label={gt("{action} for {serverLabel}", { action: actionLabel, serverLabel })}
+            disabled={manualCommand === null && !canUpdate}
+            onClick={onClick}
+          />
+        }
+        label={actionLabel}
+      >
+        <CircleArrowUpIcon className="size-3.5" />
+      </SharedTooltipTrigger>
     );
   }
 
